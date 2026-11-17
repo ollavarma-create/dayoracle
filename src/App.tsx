@@ -18,7 +18,8 @@ const text = {
     quote: "A thought for today",
     timeline: "Your cosmic curves",
     mystic: "Mystic", skeptic: "Skeptic",
-    noBirth: "Enter your date of birth to begin.",\n    chartHint: "Hover to inspect · click a date to explore",
+    noBirth: "Enter your date of birth to begin.",
+    chartHint: "Hover to inspect · click a date to explore",
     disclaimer: "Classic biorhythms and astrology are for entertainment, not medical advice or reliable predictions.",
     days: "Days since birth",
     forget: "Forget birth date",
@@ -36,7 +37,8 @@ const text = {
     quote: "Päivän ajatus",
     timeline: "Kosmiset käyräsi",
     mystic: "Mystikko", skeptic: "Skeptikko",
-    noBirth: "Aloita antamalla syntymäpäiväsi.",\n    chartHint: "Tutki hiirellä · valitse päivä napsauttamalla",
+    noBirth: "Aloita antamalla syntymäpäiväsi.",
+    chartHint: "Tutki hiirellä · valitse päivä napsauttamalla",
     disclaimer: "Perinteiset biorytmit ja astrologia ovat viihdettä, eivät terveysneuvoja tai luotettavia ennusteita.",
     days: "Päiviä syntymästä",
     forget: "Unohda syntymäpäivä",
@@ -71,7 +73,8 @@ function localToday(): string {
 // Keep interpretations separate from the UI and from scientific claims.
 import { oracleMessage } from "./oracle";
 
-function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]; today: string; lang: Locale; onSelect: (date: string) => void }) {\n  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]; today: string; lang: Locale; onSelect: (date: string) => void }) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const tracks = [
     { key: "physical" as const, color: "#e4ad74", label: text[lang].physical },
     { key: "emotional" as const, color: "#7ec7b3", label: text[lang].emotional },
@@ -81,14 +84,21 @@ function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]
   const plotW = width - left - right, plotH = height - top - bottom;
   const x = (index: number) => left + (index / Math.max(1, timeline.length - 1)) * plotW;
   const y = (value: number) => top + (1 - (value + 100) / 200) * plotH;
-  const currentIndex = timeline.findIndex((point) => point.date === today);\n  const selectedIndex = hoverIndex ?? currentIndex;\n  const selectedPoint = selectedIndex >= 0 ? timeline[selectedIndex] : undefined;\n  const nearest = (clientX: number, rect: DOMRect) => {\n    const svgX = (clientX - rect.left) / rect.width * width;\n    return Math.max(0, Math.min(timeline.length - 1, Math.round((svgX - left) / plotW * (timeline.length - 1))));\n  };
+  const currentIndex = timeline.findIndex((point) => point.date === today);
+  const selectedIndex = hoverIndex ?? currentIndex;
+  const selectedPoint = selectedIndex >= 0 ? timeline[selectedIndex] : undefined;
+  const nearest = (clientX: number, rect: DOMRect) => {
+    const svgX = (clientX - rect.left) / rect.width * width;
+    return Math.max(0, Math.min(timeline.length - 1, Math.round((svgX - left) / plotW * (timeline.length - 1))));
+  };
   return (
     <div className="chart-wrap">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={lang === "fi" ? "Biorytmikäyrä. Valitse päivä napsauttamalla." : "Biorhythm chart. Click to select a date."} className="chart">
         {[-100, 0, 100].map((value) =>
           <g key={value}><line x1={left} x2={width-right} y1={y(value)} y2={y(value)} className="gridline" />
             <text x="4" y={y(value)+4} className="axis-text">{value}</text></g>)}
-        {currentIndex >= 0 && <line x1={x(currentIndex)} x2={x(currentIndex)} y1={top} y2={height-bottom} className="today-line" />}\n        {selectedIndex >= 0 && <line x1={x(selectedIndex)} x2={x(selectedIndex)} y1={top} y2={height-bottom} className="hover-line" />}
+        {currentIndex >= 0 && <line x1={x(currentIndex)} x2={x(currentIndex)} y1={top} y2={height-bottom} className="today-line" />}
+        {selectedIndex >= 0 && <line x1={x(selectedIndex)} x2={x(selectedIndex)} y1={top} y2={height-bottom} className="hover-line" />}
         {tracks.map(({key,color}) =>
           <polyline key={key} points={timeline.map((point,i) => `${x(i)},${y(point.values[key])}`).join(" ")}
             fill="none" stroke={color} strokeWidth="2.7" strokeLinejoin="round" strokeLinecap="round" />)}
@@ -96,7 +106,8 @@ function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]
           .map((point) => {const i=timeline.indexOf(point); return <text key={point.date} x={x(i)} y={height-5}
             textAnchor={i===0 ? "start" : i===timeline.length-1 ? "end" : "middle"} className="axis-text">{point.date.slice(5)}</text>;})}
       </svg>
-      {selectedPoint && <div className="chart-detail" aria-live="polite"><strong>{selectedPoint.date}</strong>{tracks.map(({key,label,color}) => <span key={key} style={{color}}>{label}: {selectedPoint.values[key] > 0 ? "+" : ""}{selectedPoint.values[key]}%</span>)}</div>}\n      <div className="legend">{tracks.map(({key,color,label}) =>
+      {selectedPoint && <div className="chart-detail" aria-live="polite"><strong>{selectedPoint.date}</strong>{tracks.map(({key,label,color}) => <span key={key} style={{color}}>{label}: {selectedPoint.values[key] > 0 ? "+" : ""}{selectedPoint.values[key]}%</span>)}</div>}
+      <div className="legend">{tracks.map(({key,color,label}) =>
         <span key={key}><i style={{background:color}} />{label}</span>)}</div>
     </div>
   );
