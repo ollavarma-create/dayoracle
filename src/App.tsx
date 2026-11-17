@@ -5,7 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createVault, unlockVault, writeVault, deleteVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
-import { addForecast, mayAssess, assessForecast, forecastStats, type ForecastHistory, type ForecastRating } from "./forecast-history";
+import { addForecast, mayAssess, assessForecast, type ForecastHistory, type ForecastRating } from "./forecast-history";
 import { VaultSaveQueue } from "./vault-save-queue";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
@@ -624,7 +624,6 @@ export default function App() {
   }, [vaultStatus, view, result, error, birth, day, persona, lang]);
 
   const savedForecast = forecasts[day];
-  const historyStats = forecastStats(forecasts);
   const [assessmentNote, setAssessmentNote] = useState("");
   const [assessmentRating, setAssessmentRating] = useState<ForecastRating>("unsure");
   const [assessmentError, setAssessmentError] = useState("");
