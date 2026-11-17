@@ -289,6 +289,7 @@ export default function App() {
   const setStatus = (status: VaultStatus) => { statusRef.current = status; setVaultStatus(status); };
 
   const [birth, setBirth] = useState(() => localStorage.getItem("dayoracle-birth") ?? "");
+  const validBirthInput = (value: string) => value === "" || (/^\d{4}-\d{2}-\d{2}$/.test(value) && value >= "1800-01-01" && value <= localToday());
   const [day, setDay] = useState(localToday);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
@@ -302,6 +303,7 @@ export default function App() {
   const [reflections, setReflections] = useState(() => parseReflections(localStorage.getItem(REFLECTION_STORAGE_KEY)));
   const t = text[lang];
   const persist = (state: VaultState) => {
+    if (!validBirthInput(state.birthDate)) return;
     if (statusRef.current === "unlocked" && secret.current) {
       saveQueue.current!.stage(state);
       setSaveState("pending");
@@ -519,6 +521,11 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
+    if (!validBirthInput(birth)) {
+      setResult(null);
+      setError(lang === "fi" ? "Tarkista syntymäpäivä (aikaisintaan 1.1.1800)." : "Check birth date (earliest 1800-01-01).");
+      return;
+    }
     if (statusRef.current === "unlocked" && lastBirth.current !== null && lastBirth.current !== birth) {
       persist({ birthDate: birth, intentions, reflections });
     }
@@ -650,7 +657,7 @@ export default function App() {
         {backupMessage && <p role="status">{backupMessage}</p>}
       </section>}
       <section className="inputs" aria-label="Oracle settings">
-        <label>{t.birth}<input type="date" value={birth} max={day} onChange={(event) => setBirth(event.target.value)} /></label>
+        <label>{t.birth}<input type="date" value={birth} min="1800-01-01" max={day} onChange={(event) => { const value = event.target.value; if (validBirthInput(value)) setBirth(value); }} /></label>
         <label>{t.date}<input type="date" value={day} min={birth || undefined} onChange={(event) => setDay(event.target.value)} /></label>
         <label>{lang === "fi" ? "Oraakkeli" : "Oracle persona"}
           <select value={persona} onChange={(event) => setPersona(event.target.value as Persona)}>
