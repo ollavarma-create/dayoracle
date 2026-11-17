@@ -294,7 +294,11 @@ mod tests {
     fn deleting_vault_requires_correct_password() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("journal.vault.json");
-        atomic_write(&path, &encrypt("correct password", r#"{"birthDate":"2000-01-01"}"#).unwrap()).unwrap();
+        atomic_write(
+            &path,
+            &encrypt("correct password", r#"{"birthDate":"2000-01-01"}"#).unwrap(),
+        )
+        .unwrap();
         assert!(delete_authenticated_vault(&path, "wrong password").is_err());
         assert!(path.exists());
         delete_authenticated_vault(&path, "correct password").unwrap();
