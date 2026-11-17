@@ -227,6 +227,29 @@ export default function App() {
   const secret = useRef<string | null>(null);
   const statusRef = useRef<VaultStatus>("checking");
   const pending = useRef<Promise<void>>(Promise.resolve());
+  const staged = useRef<VaultState | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveFailure = useRef(false);
+  const flushVault = async () => {
+    if (saveTimer.current !== null) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (staged.current && secret.current && statusRef.current === "unlocked") {
+      const snapshot = staged.current;
+      staged.current = null;
+      const password = secret.current;
+      pending.current = pending.current.then(() => writeVault(password, snapshot));
+    }
+    try {
+      await pending.current;
+      saveFailure.current = false;
+    } catch {
+      saveFailure.current = true;
+      setVaultError(text[lang].vaultError);
+      throw new Error("Encrypted journal save failed");
+    }
+  };
+  useEffect(() => () => {
+    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+  }, []);
   const lastBirth = useRef<string | null>(null);
   const setStatus = (status: VaultStatus) => { statusRef.current = status; setVaultStatus(status); };
 
@@ -245,9 +268,11 @@ export default function App() {
   const t = text[lang];
   const persist = (state: VaultState) => {
     if (statusRef.current === "unlocked" && secret.current) {
-      const password = secret.current;
-      pending.current = pending.current.then(() => writeVault(password, state))
-        .catch(() => setVaultError(t.vaultError));
+      staged.current = state;
+      if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        void flushVault().catch(() => { /* Keep the journal unlocked on write failure. */ });
+      }, 900);
     } else if (statusRef.current === "unprotected") {
       localStorage.setItem("dayoracle-intentions", JSON.stringify(state.intentions));
       localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(state.reflections));
@@ -292,7 +317,8 @@ export default function App() {
   };
   const lockVault = async () => {
     if (vaultBusy || vaultStatus !== "unlocked") return;
-    setVaultBusy(true); await pending.current;
+    setVaultBusy(true); setVaultError("");
+    try { await flushVault(); } catch { setVaultBusy(false); return; }
     secret.current = null; setBirth(""); setIntentions({}); setReflections({});
     setVaultPassword(""); setVaultNew(""); setBackupPassword(""); setBackupImportOpen(false); setJournalQuery(""); setSettingsOpen(false); setPasswordSettingsOpen(false); lastBirth.current = null; setStatus("locked");
     setVaultBusy(false);
@@ -302,7 +328,7 @@ export default function App() {
     if (vaultNew.length < 12) { setVaultError(t.vaultMismatch); return; }
     setVaultBusy(true); setVaultError("");
     try {
-      await pending.current;
+      await flushVault();
       await changeVaultPassword(secret.current ?? "", vaultNew);
       secret.current = vaultNew; setVaultNew("");
     } catch { setVaultError(t.vaultError); } finally { setVaultBusy(false); }
@@ -310,7 +336,7 @@ export default function App() {
   const exportVault = async () => {
     if (vaultStatus !== "unlocked") return;
     try {
-      await pending.current;
+      await flushVault();
       const data = await exportEncryptedVault(secret.current ?? "");
       const destination = await save({ defaultPath: "dayoracle-journal.encrypted.json" });
       if (destination) { await writeTextFile(destination, data); setBackupMessage(t.journalExportOk); }
@@ -323,7 +349,7 @@ export default function App() {
     try {
       const data = await previewEncryptedVault(backupPassword, await file.text());
       if (!window.confirm(t.vaultImportConfirm)) return;
-      await pending.current;
+      await flushVault();
       await writeVault(secret.current ?? "", data);
       lastBirth.current = data.birthDate;
       setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections);
@@ -352,7 +378,7 @@ export default function App() {
   const exportJournal = async (format: "json" | "md") => {
     try {
       if (vaultStatus === "unlocked" && !window.confirm(t.vaultPlainWarning)) return;
-      await pending.current;
+      if (vaultStatus === "unlocked") await flushVault();
       const backup = makeBackup(birth, intentions, reflections);
       const filename = format === "json" ? "dayoracle-journal.json" : "dayoracle-journal.md";
       const destination = await save({
