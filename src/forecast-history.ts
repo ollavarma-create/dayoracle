@@ -33,7 +33,7 @@ export function addForecast(history: ForecastHistory, forecast: ForecastSnapshot
 export type AssessmentTime = "any" | `${number}:${number}`;
 export function validAssessmentTime(value: string): boolean {
   if (value === "any") return true;
-  if (!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(value)) return false;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return false;
   return true;
 }
 
