@@ -261,7 +261,7 @@ export default function App() {
         </label>
         <button type="button" className="muted-button view-switch" aria-pressed={view === "biorhythms"}
           onClick={() => setView(view === "biorhythms" ? "oracle" : "biorhythms")}>
-          {view === "oracle" ? t.showBiorhythms : t.backToOracle}
+          {view === "biorhythms" ? t.backToOracle : t.showBiorhythms}
         </button>
         <button type="button" className="muted-button journal-switch" aria-pressed={view === "journal"}
           onClick={() => setView(view === "journal" ? "oracle" : "journal")}>
