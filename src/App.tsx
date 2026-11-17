@@ -5,6 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createVault, unlockVault, writeVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
+import { VaultSaveQueue } from "./vault-save-queue";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
 import { clearBirthReflections, EMPTY_REFLECTION, parseReflections, reflectionKey, REFLECTION_STORAGE_KEY, updateReflection, type DailyReflection } from "./evening-reflection";
@@ -227,28 +228,26 @@ export default function App() {
   const [vaultBusy, setVaultBusy] = useState(false);
   const secret = useRef<string | null>(null);
   const statusRef = useRef<VaultStatus>("checking");
-  const pending = useRef<Promise<void>>(Promise.resolve());
   const [saveState, setSaveState] = useState<"saved" | "pending" | "saving" | "error">("saved");
   const closeInProgress = useRef(false);
-  const staged = useRef<VaultState | null>(null);
-  const snapshotForRetry = useRef<VaultState | null>(null);
+  const saveQueue = useRef<VaultSaveQueue<VaultState> | null>(null);
+  if (!saveQueue.current) {
+    saveQueue.current = new VaultSaveQueue(async snapshot => {
+      const password = secret.current;
+      if (!password || statusRef.current !== "unlocked") throw new Error("Vault is locked");
+      await writeVault(password, snapshot);
+    });
+  }
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushVault = async () => {
     if (saveTimer.current !== null) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-    if (staged.current && secret.current && statusRef.current === "unlocked") {
-      const snapshot = staged.current;
-      snapshotForRetry.current = snapshot;
-      staged.current = null;
-      setSaveState("saving");
-      const password = secret.current;
-      pending.current = pending.current.catch(() => { /* Previous failure was reported. Retry latest state. */ }).then(() => writeVault(password, snapshot));
-    }
+    const queue = saveQueue.current!;
+    if (!queue.dirty) return;
+    setSaveState("saving");
     try {
-      await pending.current;
-      snapshotForRetry.current = null;
-      if (!staged.current) setSaveState("saved");
+      await queue.flush();
+      setSaveState("saved");
     } catch {
-      staged.current ??= snapshotForRetry.current;
       setSaveState("error");
       setVaultError(text[lang].vaultError);
       throw new Error("Encrypted journal save failed");
@@ -297,7 +296,7 @@ export default function App() {
   const t = text[lang];
   const persist = (state: VaultState) => {
     if (statusRef.current === "unlocked" && secret.current) {
-      staged.current = state;
+      saveQueue.current!.stage(state);
       setSaveState("pending");
       if (saveTimer.current !== null) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
