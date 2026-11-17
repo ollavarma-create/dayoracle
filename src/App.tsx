@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import { dailyQuestion } from "./reflection";
+import { journalEntries } from "./journal";
 import { clearBirthReflections, EMPTY_REFLECTION, parseReflections, reflectionKey, REFLECTION_STORAGE_KEY, updateReflection, type DailyReflection } from "./evening-reflection";
 
 
@@ -33,6 +34,15 @@ const text = {
     timeline: "Your cosmic curves",
     showBiorhythms: "Daily biorhythms",
     backToOracle: "Back to oracle",
+    journal: "Journal",
+    journalTitle: "Your days, in your own words",
+    journalEmpty: "No saved intentions or reflections yet.",
+    journalOpen: "Open this day",
+    journalIntention: "Intention",
+    journalObservation: "Observation",
+    journalDone: "Followed it",
+    journalPartly: "A little",
+    journalNotToday: "Not today",
     mystic: "Mystic", skeptic: "Skeptic",
     noBirth: "Enter your date of birth to begin.",
     chartHint: "Hover to inspect · click a date to explore",
@@ -66,6 +76,15 @@ const text = {
     timeline: "Kosmiset käyräsi",
     showBiorhythms: "Päivän biorytmit",
     backToOracle: "Takaisin oraakkeliin",
+    journal: "Päiväkirja",
+    journalTitle: "Omat päiväsi, omin sanoin",
+    journalEmpty: "Ei vielä tallennettuja aikomuksia tai pohdintoja.",
+    journalOpen: "Avaa tämä päivä",
+    journalIntention: "Aikomus",
+    journalObservation: "Havainto",
+    journalDone: "Toteutin sen",
+    journalPartly: "Vähän",
+    journalNotToday: "En tänään",
     mystic: "Mystikko", skeptic: "Skeptikko",
     noBirth: "Aloita antamalla syntymäpäiväsi.",
     chartHint: "Tutki hiirellä · valitse päivä napsauttamalla",
@@ -156,7 +175,7 @@ function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]
 export default function App() {
   const [lang, setLang] = useState<Locale>(() => localStorage.getItem("dayoracle-lang") === "fi" ? "fi" : "en");
   const [persona, setPersona] = useState<Persona>("mystic");
-  const [view, setView] = useState<"oracle" | "biorhythms">("oracle");
+  const [view, setView] = useState<"oracle" | "biorhythms" | "journal">("oracle");
   const [birth, setBirth] = useState(() => localStorage.getItem("dayoracle-birth") ?? "");
   const [day, setDay] = useState(localToday);
   const [result, setResult] = useState<Result | null>(null);
@@ -184,6 +203,7 @@ export default function App() {
   };
   const t = text[lang];
   const intention = intentions[day] ?? "";
+  const entries = useMemo(() => journalEntries(birth, intentions, reflections), [birth, intentions, reflections]);
 
   useEffect(() => {
     localStorage.setItem("dayoracle-lang", lang);
@@ -240,8 +260,12 @@ export default function App() {
           </select>
         </label>
         <button type="button" className="muted-button view-switch" aria-pressed={view === "biorhythms"}
-          onClick={() => setView(view === "oracle" ? "biorhythms" : "oracle")}>
+          onClick={() => setView(view === "biorhythms" ? "oracle" : "biorhythms")}>
           {view === "oracle" ? t.showBiorhythms : t.backToOracle}
+        </button>
+        <button type="button" className="muted-button journal-switch" aria-pressed={view === "journal"}
+          onClick={() => setView(view === "journal" ? "oracle" : "journal")}>
+          {view === "journal" ? t.backToOracle : t.journal}
         </button>
         <button type="button" className="muted-button" onClick={() => setDay(localToday())}>{t.backToToday}</button>
         {birth && <button className="muted-button" onClick={forget}>{t.forget}</button>}
@@ -300,6 +324,26 @@ export default function App() {
           </div>}
         </section>
       </>}
+      {birth && !error && view === "journal" && <section className="panel journal-panel">
+        <div className="eyebrow">✦ {t.journal}</div>
+        <h2>{t.journalTitle}</h2>
+        {entries.length === 0 ? <p className="subtle">{t.journalEmpty}</p> :
+          <div className="journal-list">
+            {entries.map((entry) => (
+              <article className="journal-entry" key={entry.date}>
+                <div className="journal-entry-header">
+                  <strong>{entry.date}</strong>
+                  <button type="button" className="muted-button" onClick={() => { setDay(entry.date); setView("oracle"); }}>
+                    {t.journalOpen}
+                  </button>
+                </div>
+                {entry.intention && <p><span>{t.journalIntention}: </span>{t[entry.intention as "curious" | "kind" | "pause"] ?? entry.intention}</p>}
+                {entry.status && <p><span>{t.evening}: </span>{entry.status === "done" ? t.journalDone : entry.status === "partly" ? t.journalPartly : t.journalNotToday}</p>}
+                {entry.note && <p className="journal-note"><span>{t.journalObservation}: </span>{entry.note}</p>}
+              </article>
+            ))}
+          </div>}
+      </section>}
       {result && !error && view === "biorhythms" && <>
         <div className="biorhythm-heading">
           <h2>{t.showBiorhythms}</h2>
