@@ -129,6 +129,12 @@ fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     tmp.as_file().sync_all().map_err(|e| e.to_string())?;
     tmp.persist(path).map_err(|e| e.error.to_string())?;
+    // The file data is durable above; on Unix, sync the parent directory too
+    // so the atomic rename is durable across an unexpected power loss.
+    #[cfg(unix)]
+    fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|e| format!("Vault directory sync failed: {e}"))?;
     Ok(())
 }
 
