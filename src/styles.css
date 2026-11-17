@@ -54,3 +54,49 @@ select option{background-color:#1b2b42;color:#f4ecdf}
 .biorhythm-heading h2{font-family:Georgia,serif;font-size:24px;margin:0}
 .biorhythm-heading p{font-size:13px;color:#b8c6d7;margin:0}
 @media(max-width:720px){.inputs{flex-wrap:wrap}.view-switch{order:1}}
+
+/* PR #7: compact settings toolbar and keep the complete oracle view in sight. */
+@media (min-width: 901px) {
+  .inputs {
+    display: grid;
+    grid-template-columns: minmax(145px,1fr) minmax(145px,1fr) minmax(145px,1fr) auto auto auto;
+    align-items: end;
+    gap: 9px;
+  }
+  .inputs label { min-width: 0; width: 100%; }
+  .inputs input, .inputs select { width: 100%; min-width: 0; }
+  .inputs .muted-button { padding: 9px 10px; white-space: nowrap; font-size: 14px; }
+}
+@media (min-width: 721px) and (max-width: 900px) {
+  .inputs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+  .inputs label { min-width: 0; }
+  .inputs input, .inputs select { width: 100%; }
+  .inputs .muted-button { min-width: 0; padding: 9px 8px; font-size: 13px; }
+}
+@media (max-width: 720px) {
+  .inputs { gap: 8px; }
+  .inputs label { min-width: min(145px,100%); }
+  .inputs .muted-button { font-size: 13px; padding: 8px 10px; }
+  .view-switch { order: 0; }
+}
+.shell { padding-top: 15px; padding-bottom: 10px; }
+.header { margin-bottom: 9px; }
+.header .brand { gap: 12px; }
+.header h1 { line-height: 1.08; }
+.inputs { margin-bottom: 8px; }
+.hero { padding: 12px 18px; }
+.hero h2 { margin: 5px 0; line-height: 1.2; font-size: 22px; }
+.bottom-grid { margin: 8px 0; gap: 10px; }
+.bottom-grid .panel { padding: 12px 16px; }
+.bottom-grid .quote { margin: 8px 0 4px; line-height: 1.24; }
+.reflection-question { margin-top: 8px; padding-top: 8px; }
+.reflection-question p { margin-top: 5px; line-height: 1.27; }
+.intentions { margin-top: 8px; gap: 5px; }
+.intent { padding: 7px 10px; }
+.intention-saved { margin-top: 6px; }
+.evening-panel { margin: 8px 0; padding: 12px 16px; }
+.evening-prompt { margin: 5px 0 7px; }
+.evening-note { margin-top: 8px; gap: 5px; }
+.evening-note textarea { min-height: 48px; padding: 8px 10px; }
+.evening-actions { margin-top: 5px; }
+footer { margin-top: 10px; padding-bottom: 4px; }
