@@ -55,7 +55,7 @@ const text = {
     journalImport: "Restore JSON backup",
     journalImportConfirm: "Replace the current journal and birth date with this backup? This cannot be undone.",
     journalImportOk: "Backup restored",
-    journalImportError: "Backup could not be restored",
+    journalImportError: "Backup could not be restored", journalEncryptedImportHint: "This is an encrypted backup. Restore it in Settings → Restore encrypted backup.",
     journalBackupNote: "Exports are unencrypted. Store them privately.",
     journalNoMatches: "No matching entries.",
     journalEmpty: "No saved intentions or reflections yet.",
@@ -113,7 +113,7 @@ const text = {
     journalImport: "Palauta JSON-varmuuskopio",
     journalImportConfirm: "Korvataanko nykyinen päiväkirja ja syntymäpäivä varmuuskopiolla? Tätä ei voi perua.",
     journalImportOk: "Varmuuskopio palautettu",
-    journalImportError: "Varmuuskopion palautus epäonnistui",
+    journalImportError: "Varmuuskopion palautus epäonnistui", journalEncryptedImportHint: "Tämä on salattu varmuuskopio. Palauta se kohdasta Asetukset → Palauta salattu varmuuskopio.",
     journalBackupNote: "Vientitiedostot ovat salaamattomia. Säilytä ne yksityisesti.",
     journalNoMatches: "Ei hakua vastaavia merkintöjä.",
     journalEmpty: "Ei vielä tallennettuja aikomuksia tai pohdintoja.",
@@ -438,19 +438,45 @@ export default function App() {
     setBackupMessage(t.journalClearDone);
   };
   const importJournal = async (file: File | undefined) => {
-    if (!file) return;
+    if (!file || vaultBusy) return;
     if (file.size > 2_000_000) { setBackupMessage(t.journalImportError); return; }
+    setBackupMessage("");
     try {
-      const backup = parseBackup(await file.text());
+      const raw = await file.text();
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && "format" in parsed &&
+          (parsed as { format?: unknown }).format === "dayoracle-encrypted-journal") {
+        setBackupMessage(t.journalEncryptedImportHint);
+        return;
+      }
+      const backup = parseBackup(raw);
       if (!window.confirm(t.journalImportConfirm)) return;
-      persist({ birthDate: backup.birthDate, intentions: backup.intentions, reflections: backup.reflections });
-      if (vaultStatus === "unprotected") localStorage.setItem("dayoracle-birth", backup.birthDate);
-      setIntentions(backup.intentions);
-      setReflections(backup.reflections);
-      setBirth(backup.birthDate);
+      const restored = { birthDate: backup.birthDate, intentions: backup.intentions, reflections: backup.reflections };
+      if (vaultStatus === "unlocked") {
+        setVaultBusy(true);
+        try {
+          await flushVault();
+          await writeVault(secret.current ?? "", restored);
+          lastBirth.current = restored.birthDate;
+        } finally {
+          setVaultBusy(false);
+        }
+      } else if (vaultStatus === "unprotected") {
+        localStorage.setItem("dayoracle-intentions", JSON.stringify(restored.intentions));
+        localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(restored.reflections));
+        localStorage.setItem("dayoracle-birth", restored.birthDate);
+      } else {
+        throw new Error("Journal unavailable");
+      }
+      setIntentions(restored.intentions);
+      setReflections(restored.reflections);
+      setBirth(restored.birthDate);
       setDay(localToday());
       setBackupMessage(t.journalImportOk);
-    } catch { setBackupMessage(t.journalImportError); }
+    } catch (error) {
+      console.error("Plain JSON backup restore failed:", error);
+      setBackupMessage(t.journalImportError);
+    }
   };
 
   useEffect(() => {
