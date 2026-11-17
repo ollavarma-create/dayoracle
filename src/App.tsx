@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
+import { dailyQuestion } from "./reflection";
 
 
 type Cycles = { physical: number; emotional: number; intellectual: number };
@@ -16,6 +17,9 @@ const text = {
     perspective: "Today's perspective",
     physical: "Physical", emotional: "Emotional", intellectual: "Intellectual",
     quote: "A thought for today",
+    question: "A question worth asking",
+    intentionSaved: "Saved on this device for this date",
+    backToToday: "Today",
     timeline: "Your cosmic curves",
     mystic: "Mystic", skeptic: "Skeptic",
     noBirth: "Enter your date of birth to begin.",
@@ -35,6 +39,9 @@ const text = {
     perspective: "Päivän näkökulma",
     physical: "Fyysinen", emotional: "Emotionaalinen", intellectual: "Älyllinen",
     quote: "Päivän ajatus",
+    question: "Kysymys pohdittavaksi",
+    intentionSaved: "Tallennettu tälle päivälle tällä laitteella",
+    backToToday: "Tänään",
     timeline: "Kosmiset käyräsi",
     mystic: "Mystikko", skeptic: "Skeptikko",
     noBirth: "Aloita antamalla syntymäpäiväsi.",
@@ -130,8 +137,15 @@ export default function App() {
   const [day, setDay] = useState(localToday);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
-  const [intention, setIntention] = useState("");
+  const [intentions, setIntentions] = useState<Record<string, string>>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("dayoracle-intentions") ?? "{}");
+      if (saved && typeof saved === "object" && !Array.isArray(saved)) return saved as Record<string, string>;
+    } catch { /* Ignore malformed local data. */ }
+    return {};
+  });
   const t = text[lang];
+  const intention = intentions[day] ?? "";
 
   useEffect(() => {
     localStorage.setItem("dayoracle-lang", lang);
@@ -156,7 +170,17 @@ export default function App() {
   }, [birth, day]);
 
   const quote = useMemo(() => quotes[lang][Array.from(day).reduce((sum, char) => sum + char.charCodeAt(0), 0) % quotes[lang].length], [lang, day]);
-  const forget = () => { setBirth(""); setResult(null); setIntention(""); };
+  const forget = () => {
+    setBirth("");
+    setResult(null);
+    setIntentions({});
+    localStorage.removeItem("dayoracle-intentions");
+  };
+  const chooseIntention = (key: string) => {
+    const next = { ...intentions, [day]: key };
+    setIntentions(next);
+    localStorage.setItem("dayoracle-intentions", JSON.stringify(next));
+  };
   return (
     <main className="shell">
       <header className="header">
@@ -174,6 +198,7 @@ export default function App() {
             <option value="mystic">{t.mystic}</option><option value="skeptic">{t.skeptic}</option>
           </select>
         </label>
+        <button type="button" className="muted-button" onClick={() => setDay(localToday())}>{t.backToToday}</button>
         {birth && <button className="muted-button" onClick={forget}>{t.forget}</button>}
       </section>
 
@@ -201,14 +226,19 @@ export default function App() {
             <div className="eyebrow">✧ {t.quote}</div>
             <p className="quote">“{quote}”</p>
             <small>— DayOracle</small>
+            <div className="reflection-question">
+              <div className="eyebrow">✦ {t.question}</div>
+              <p>{dailyQuestion(lang, persona, day, birth)}</p>
+            </div>
           </div>
           <div className="panel">
             <div className="eyebrow">☀ {t.intention}</div>
             <div className="intentions">
               {(["curious","kind","pause"] as const).map((key) =>
                 <button type="button" className={intention===key?"intent active":"intent"} key={key}
-                  onClick={() => setIntention(key)} aria-pressed={intention===key}>{t[key]}</button>)}
+                  onClick={() => chooseIntention(key)} aria-pressed={intention===key}>{t[key]}</button>)}
             </div>
+            {intention && <p className="intention-saved" role="status">✓ {t.intentionSaved}</p>}
           </div>
         </section>
       </>}
