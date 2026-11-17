@@ -47,3 +47,10 @@ select option{background-color:#1b2b42;color:#f4ecdf}
 .evening-note textarea:focus-visible{outline:2px solid #e7bd7b;outline-offset:2px}
 .evening-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#a6d9c6}
 .evening-clear{border:0;background:transparent;color:#b9c7d7;text-decoration:underline;padding:5px}
+
+/* PR #6: switch between the daily oracle and an exploratory biorhythm view */
+.view-switch[aria-pressed="true"]{border-color:#e4ad74;color:#f2d4a6}
+.biorhythm-heading{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin:8px 0 12px}
+.biorhythm-heading h2{font-family:Georgia,serif;font-size:24px;margin:0}
+.biorhythm-heading p{font-size:13px;color:#b8c6d7;margin:0}
+@media(max-width:720px){.inputs{flex-wrap:wrap}.view-switch{order:1}}

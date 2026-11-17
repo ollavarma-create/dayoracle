@@ -31,6 +31,8 @@ const text = {
     eveningSaved: "Saved privately on this device",
     eveningClear: "Clear this reflection",
     timeline: "Your cosmic curves",
+    showBiorhythms: "Daily biorhythms",
+    backToOracle: "Back to oracle",
     mystic: "Mystic", skeptic: "Skeptic",
     noBirth: "Enter your date of birth to begin.",
     chartHint: "Hover to inspect · click a date to explore",
@@ -62,6 +64,8 @@ const text = {
     eveningSaved: "Tallennettu yksityisesti tälle laitteelle",
     eveningClear: "Tyhjennä tämä pohdinta",
     timeline: "Kosmiset käyräsi",
+    showBiorhythms: "Päivän biorytmit",
+    backToOracle: "Takaisin oraakkeliin",
     mystic: "Mystikko", skeptic: "Skeptikko",
     noBirth: "Aloita antamalla syntymäpäiväsi.",
     chartHint: "Tutki hiirellä · valitse päivä napsauttamalla",
@@ -152,6 +156,7 @@ function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]
 export default function App() {
   const [lang, setLang] = useState<Locale>(() => localStorage.getItem("dayoracle-lang") === "fi" ? "fi" : "en");
   const [persona, setPersona] = useState<Persona>("mystic");
+  const [view, setView] = useState<"oracle" | "biorhythms">("oracle");
   const [birth, setBirth] = useState(() => localStorage.getItem("dayoracle-birth") ?? "");
   const [day, setDay] = useState(localToday);
   const [result, setResult] = useState<Result | null>(null);
@@ -234,13 +239,17 @@ export default function App() {
             <option value="mystic">{t.mystic}</option><option value="skeptic">{t.skeptic}</option>
           </select>
         </label>
+        <button type="button" className="muted-button view-switch" aria-pressed={view === "biorhythms"}
+          onClick={() => setView(view === "oracle" ? "biorhythms" : "oracle")}>
+          {view === "oracle" ? t.showBiorhythms : t.backToOracle}
+        </button>
         <button type="button" className="muted-button" onClick={() => setDay(localToday())}>{t.backToToday}</button>
         {birth && <button className="muted-button" onClick={forget}>{t.forget}</button>}
       </section>
 
       {!birth && <section className="panel empty"><h2>{t.noBirth}</h2><p>{t.disclaimer}</p></section>}
       {error && <section className="panel error" role="alert">{error}</section>}
-      {result && !error && <>
+      {result && !error && view === "oracle" && <>
         <section className="hero panel">
           <div className="eyebrow">✦ {t.perspective}</div>
           <h2>{oracleMessage(result.values, persona, lang, day, birth)}</h2>
@@ -290,6 +299,12 @@ export default function App() {
             <button type="button" className="evening-clear" onClick={clearReflection}>{t.eveningClear}</button>
           </div>}
         </section>
+      </>}
+      {result && !error && view === "biorhythms" && <>
+        <div className="biorhythm-heading">
+          <h2>{t.showBiorhythms}</h2>
+          <p>{t.days}: {result.daysLived.toLocaleString(lang)}</p>
+        </div>
         <section className="score-grid">
           {(["physical","emotional","intellectual"] as const).map((name) =>
             <div className="score panel" key={name}>
