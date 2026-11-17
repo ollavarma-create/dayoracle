@@ -9,8 +9,8 @@ DayOracle is an offline-first, cross-platform desktop experiment in playful bior
 ## Initial alpha scope
 
 - Classic physical (23-day), emotional (28-day), and intellectual (33-day) curves, calculated in Rust
-- 21-day chart and date navigation
-- Two intentionally different voices: **Mystic** and **Skeptic**
+- 21-day interactive chart (hover to inspect values, click to navigate dates)
+- Two intentionally different voices: **Mystic** and **Skeptic**, with stable daily variation
 - Original short philosophical thoughts, in English and Finnish
 - Optional daily intention selector
 - No accounts, AI API calls, telemetry, or network dependency during app use

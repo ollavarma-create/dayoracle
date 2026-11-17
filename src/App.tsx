@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 
+
 type Cycles = { physical: number; emotional: number; intellectual: number };
 type Point = { date: string; values: Cycles };
 type Result = { date: string; daysLived: number; values: Cycles; timeline: Point[] };
@@ -17,7 +18,7 @@ const text = {
     quote: "A thought for today",
     timeline: "Your cosmic curves",
     mystic: "Mystic", skeptic: "Skeptic",
-    noBirth: "Enter your date of birth to begin.",
+    noBirth: "Enter your date of birth to begin.",\n    chartHint: "Hover to inspect · click a date to explore",
     disclaimer: "Classic biorhythms and astrology are for entertainment, not medical advice or reliable predictions.",
     days: "Days since birth",
     forget: "Forget birth date",
@@ -35,7 +36,7 @@ const text = {
     quote: "Päivän ajatus",
     timeline: "Kosmiset käyräsi",
     mystic: "Mystikko", skeptic: "Skeptikko",
-    noBirth: "Aloita antamalla syntymäpäiväsi.",
+    noBirth: "Aloita antamalla syntymäpäiväsi.",\n    chartHint: "Tutki hiirellä · valitse päivä napsauttamalla",
     disclaimer: "Perinteiset biorytmit ja astrologia ovat viihdettä, eivät terveysneuvoja tai luotettavia ennusteita.",
     days: "Päiviä syntymästä",
     forget: "Unohda syntymäpäivä",
@@ -67,43 +68,27 @@ function localToday(): string {
   return `${year}-${month}-${day}`;
 }
 
-function seed(date: string): number {
-  return [...date].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-}
+// Keep interpretations separate from the UI and from scientific claims.
+import { oracleMessage } from "./oracle";
 
-function getMessage(values: Cycles, persona: Persona, locale: Locale): string {
-  const strongest = (Object.keys(values) as (keyof Cycles)[])
-    .reduce((best, key) => values[key] > values[best] ? key : best, "physical");
-  if (locale === "fi") {
-    if (persona === "skeptic") return "Tähtien vaikutuksesta ei ole näyttöä. Mutta kysymysten esittämiseen et tarvitse tähtien lupaa.";
-    if (strongest === "intellectual") return "Ajatukset kipinöivät! Ota ne talteen ennen kuin kahvi jäähtyy.";
-    if (strongest === "emotional") return "Kosmos suosittelee lempeyttä. Erittäin hyvä neuvo, vaikka kosmos ei sitä oikeasti lähettänyt.";
-    return "Fyysinen rytmi kutsuu liikkeelle. Pieni kävely käy myös galaktisesta seikkailusta.";
-  }
-  if (persona === "skeptic") return "The stars have no evidence to offer. Fortunately, curiosity requires no cosmic permission.";
-  if (strongest === "intellectual") return "Your thoughts are sparkling. Write one down before the coffee gets cold.";
-  if (strongest === "emotional") return "The cosmos recommends kindness. Excellent advice, even if the cosmos never actually said it.";
-  return "Your physical cycle calls for motion. A short walk counts as a galactic adventure.";
-}
-
-function BiorhythmChart({ timeline, today, lang }: { timeline: Point[]; today: string; lang: Locale }) {
+function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]; today: string; lang: Locale; onSelect: (date: string) => void }) {\n  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const tracks = [
     { key: "physical" as const, color: "#e4ad74", label: text[lang].physical },
     { key: "emotional" as const, color: "#7ec7b3", label: text[lang].emotional },
     { key: "intellectual" as const, color: "#9cb4f0", label: text[lang].intellectual },
   ];
-  const width = 860, height = 240, left = 32, right = 14, top = 14, bottom = 30;
+  const width = 860, height = 190, left = 32, right = 14, top = 14, bottom = 27;
   const plotW = width - left - right, plotH = height - top - bottom;
   const x = (index: number) => left + (index / Math.max(1, timeline.length - 1)) * plotW;
   const y = (value: number) => top + (1 - (value + 100) / 200) * plotH;
-  const currentIndex = timeline.findIndex((point) => point.date === today);
+  const currentIndex = timeline.findIndex((point) => point.date === today);\n  const selectedIndex = hoverIndex ?? currentIndex;\n  const selectedPoint = selectedIndex >= 0 ? timeline[selectedIndex] : undefined;\n  const nearest = (clientX: number, rect: DOMRect) => {\n    const svgX = (clientX - rect.left) / rect.width * width;\n    return Math.max(0, Math.min(timeline.length - 1, Math.round((svgX - left) / plotW * (timeline.length - 1))));\n  };
   return (
     <div className="chart-wrap">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="21-day biorhythm chart" className="chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={lang === "fi" ? "Biorytmikäyrä. Valitse päivä napsauttamalla." : "Biorhythm chart. Click to select a date."} className="chart">
         {[-100, 0, 100].map((value) =>
           <g key={value}><line x1={left} x2={width-right} y1={y(value)} y2={y(value)} className="gridline" />
             <text x="4" y={y(value)+4} className="axis-text">{value}</text></g>)}
-        {currentIndex >= 0 && <line x1={x(currentIndex)} x2={x(currentIndex)} y1={top} y2={height-bottom} className="today-line" />}
+        {currentIndex >= 0 && <line x1={x(currentIndex)} x2={x(currentIndex)} y1={top} y2={height-bottom} className="today-line" />}\n        {selectedIndex >= 0 && <line x1={x(selectedIndex)} x2={x(selectedIndex)} y1={top} y2={height-bottom} className="hover-line" />}
         {tracks.map(({key,color}) =>
           <polyline key={key} points={timeline.map((point,i) => `${x(i)},${y(point.values[key])}`).join(" ")}
             fill="none" stroke={color} strokeWidth="2.7" strokeLinejoin="round" strokeLinecap="round" />)}
@@ -111,7 +96,7 @@ function BiorhythmChart({ timeline, today, lang }: { timeline: Point[]; today: s
           .map((point) => {const i=timeline.indexOf(point); return <text key={point.date} x={x(i)} y={height-5}
             textAnchor={i===0 ? "start" : i===timeline.length-1 ? "end" : "middle"} className="axis-text">{point.date.slice(5)}</text>;})}
       </svg>
-      <div className="legend">{tracks.map(({key,color,label}) =>
+      {selectedPoint && <div className="chart-detail" aria-live="polite"><strong>{selectedPoint.date}</strong>{tracks.map(({key,label,color}) => <span key={key} style={{color}}>{label}: {selectedPoint.values[key] > 0 ? "+" : ""}{selectedPoint.values[key]}%</span>)}</div>}\n      <div className="legend">{tracks.map(({key,color,label}) =>
         <span key={key}><i style={{background:color}} />{label}</span>)}</div>
     </div>
   );
@@ -149,7 +134,7 @@ export default function App() {
     return () => { active = false; };
   }, [birth, day]);
 
-  const quote = useMemo(() => quotes[lang][seed(day) % quotes[lang].length], [lang, day]);
+  const quote = useMemo(() => quotes[lang][Array.from(day).reduce((sum, char) => sum + char.charCodeAt(0), 0) % quotes[lang].length], [lang, day]);
   const forget = () => { setBirth(""); setResult(null); setIntention(""); };
   return (
     <main className="shell">
@@ -176,7 +161,7 @@ export default function App() {
       {result && !error && <>
         <section className="hero panel">
           <div className="eyebrow">✦ {t.perspective}</div>
-          <h2>{getMessage(result.values, persona, lang)}</h2>
+          <h2>{oracleMessage(result.values, persona, lang, day, birth)}</h2>
           <p className="subtle">{t.days}: {result.daysLived.toLocaleString(lang)}</p>
         </section>
         <section className="score-grid">
@@ -187,8 +172,8 @@ export default function App() {
             </div>)}
         </section>
         <section className="panel">
-          <h3>{t.timeline}</h3>
-          <BiorhythmChart timeline={result.timeline} today={result.date} lang={lang} />
+          <div className="chart-heading"><h3>{t.timeline}</h3><span>{t.chartHint}</span></div>
+          <BiorhythmChart timeline={result.timeline} today={result.date} lang={lang} onSelect={setDay} />
         </section>
         <section className="bottom-grid">
           <div className="panel">
