@@ -41,3 +41,8 @@ export async function exportEncryptedVault(password: string): Promise<string> {
 export async function importEncryptedVault(password: string, encryptedJson: string): Promise<void> {
   await invoke("vault_import", { password, encryptedJson });
 }
+
+/** Decrypt and validate an external backup without modifying the current vault. */
+export async function previewEncryptedVault(password: string, encryptedJson: string): Promise<VaultState> {
+  return deserializeVault(await invoke<string>("vault_preview_import", { password, encryptedJson }));
+}
