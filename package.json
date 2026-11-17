@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "check": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/oracle.test.ts"
+    "test": "node --experimental-strip-types --test src/*.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

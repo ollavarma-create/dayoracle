@@ -14,3 +14,8 @@ select option{background-color:#1b2b42;color:#f4ecdf}
 .chart-detail{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;align-items:center;margin:4px 0 8px;font-size:12px;color:#d6e2ee}
 .chart-detail strong{color:#f1d39d}.bottom-grid{margin-top:10px}
 @media(max-width:720px){.chart-detail{gap:8px}.hero h2{font-size:22px}.chart-heading span{font-size:11px}}
+
+/* PR #3: small, local-only daily reflection */
+.reflection-question{border-top:1px solid #35475e;margin-top:18px;padding-top:16px}
+.reflection-question p{font-family:Georgia,serif;font-size:18px;line-height:1.45;margin:10px 0 0;color:#e8edf3}
+.intention-saved{font-size:12px;color:#a6d9c6;margin:12px 0 0}
