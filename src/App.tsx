@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createVault, unlockVault, writeVault, vaultExists, changeVaultPassword, exportEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
@@ -39,6 +40,7 @@ const text = {
     backToOracle: "Back to oracle",
     journal: "Journal",
     journalTitle: "Your days, in your own words",
+    protect: "Protect journal", vaultPassword: "Password", vaultConfirm: "Confirm password", vaultCreate: "Enable encryption", vaultUnlock: "Unlock", vaultLock: "Lock journal", vaultLocked: "Journal locked", vaultWarning: "No password recovery is available. Keep your password safe.", vaultMismatch: "Passwords must match and contain at least 12 characters.", vaultError: "Vault operation failed. Check your password or try again.", vaultNew: "New password", vaultChange: "Change password", vaultEncryptedExport: "Export encrypted backup", vaultPlainWarning: "This export is NOT encrypted. Continue?",
     journalSearch: "Search journal",
     journalClear: "Clear journal",
     journalClearConfirm: "Delete all saved intentions and reflections on this device? Your birth date and settings will be kept. This cannot be undone.",
@@ -96,6 +98,7 @@ const text = {
     backToOracle: "Takaisin oraakkeliin",
     journal: "Päiväkirja",
     journalTitle: "Omat päiväsi, omin sanoin",
+    protect: "Suojaa päiväkirja", vaultPassword: "Salasana", vaultConfirm: "Vahvista salasana", vaultCreate: "Ota salaus käyttöön", vaultUnlock: "Avaa", vaultLock: "Lukitse päiväkirja", vaultLocked: "Päiväkirja lukittu", vaultWarning: "Salasanaa ei voi palauttaa. Säilytä se huolellisesti.", vaultMismatch: "Salasanojen on täsmättävä ja oltava vähintään 12 merkkiä.", vaultError: "Salaustoiminto epäonnistui. Tarkista salasana tai yritä uudelleen.", vaultNew: "Uusi salasana", vaultChange: "Vaihda salasana", vaultEncryptedExport: "Vie salattu varmuuskopio", vaultPlainWarning: "Tämä vienti EI ole salattu. Jatketaanko?",
     journalSearch: "Hae päiväkirjasta",
     journalClear: "Tyhjennä päiväkirja",
     journalClearConfirm: "Poistetaanko kaikki tälle laitteelle tallennetut aikomukset ja pohdinnat? Syntymäpäivä ja asetukset säilyvät. Tätä ei voi perua.",
@@ -211,6 +214,17 @@ export default function App() {
   const [view, setView] = useState<"oracle" | "biorhythms" | "journal">("oracle");
   const [journalQuery, setJournalQuery] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
+  const [vaultStatus, setVaultStatus] = useState<VaultStatus>("checking");
+  const [vaultPassword, setVaultPassword] = useState("");
+  const [vaultConfirm, setVaultConfirm] = useState("");
+  const [vaultNew, setVaultNew] = useState("");
+  const [vaultError, setVaultError] = useState("");
+  const [vaultBusy, setVaultBusy] = useState(false);
+  const secret = useRef<string | null>(null);
+  const statusRef = useRef<VaultStatus>("checking");
+  const pending = useRef<Promise<void>>(Promise.resolve());
+  const setStatus = (status: VaultStatus) => { statusRef.current = status; setVaultStatus(status); };
+
   const [birth, setBirth] = useState(() => localStorage.getItem("dayoracle-birth") ?? "");
   const [day, setDay] = useState(localToday);
   const [result, setResult] = useState<Result | null>(null);
@@ -223,25 +237,100 @@ export default function App() {
     return {};
   });
   const [reflections, setReflections] = useState(() => parseReflections(localStorage.getItem(REFLECTION_STORAGE_KEY)));
+  const t = text[lang];
+  const persist = (state: VaultState) => {
+    if (statusRef.current === "unlocked" && secret.current) {
+      const password = secret.current;
+      pending.current = pending.current.then(() => writeVault(password, state))
+        .catch(() => setVaultError(t.vaultError));
+    } else if (statusRef.current === "unprotected") {
+      localStorage.setItem("dayoracle-intentions", JSON.stringify(state.intentions));
+      localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(state.reflections));
+    }
+  };
+  useEffect(() => {
+    let active = true;
+    vaultExists().then(exists => {
+      if (!active) return;
+      if (exists) {
+        localStorage.removeItem("dayoracle-intentions");
+        localStorage.removeItem(REFLECTION_STORAGE_KEY);
+        localStorage.removeItem("dayoracle-birth");
+        setBirth(""); setIntentions({}); setReflections({});
+        setStatus("locked");
+      } else setStatus("unprotected");
+    }).catch(() => { if (active) setVaultError("Vault detection failed. Restart DayOracle."); });
+    return () => { active = false; };
+  }, []);
+  const enableVault = async () => {
+    if (vaultBusy || vaultStatus !== "unprotected") return;
+    if (vaultPassword.length < 12 || vaultPassword !== vaultConfirm) { setVaultError(t.vaultMismatch); return; }
+    setVaultBusy(true); setVaultError("");
+    try {
+      await createVault(vaultPassword, { birthDate: birth, intentions, reflections });
+      secret.current = vaultPassword;
+      localStorage.removeItem("dayoracle-intentions");
+      localStorage.removeItem(REFLECTION_STORAGE_KEY);
+      localStorage.removeItem("dayoracle-birth");
+      setStatus("unlocked"); setVaultPassword(""); setVaultConfirm("");
+    } catch { setVaultError(t.vaultError); } finally { setVaultBusy(false); }
+  };
+  const openVault = async () => {
+    if (vaultBusy || vaultStatus !== "locked") return;
+    setVaultBusy(true); setVaultError("");
+    try {
+      const data = await unlockVault(vaultPassword);
+      secret.current = vaultPassword;
+      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections);
+      setVaultPassword(""); setStatus("unlocked");
+    } catch { setVaultError(t.vaultError); } finally { setVaultBusy(false); }
+  };
+  const lockVault = async () => {
+    if (vaultBusy || vaultStatus !== "unlocked") return;
+    setVaultBusy(true); await pending.current;
+    secret.current = null; setBirth(""); setIntentions({}); setReflections({});
+    setVaultPassword(""); setVaultNew(""); setJournalQuery(""); setStatus("locked");
+    setVaultBusy(false);
+  };
+  const updatePassword = async () => {
+    if (vaultBusy || vaultStatus !== "unlocked") return;
+    if (vaultNew.length < 12) { setVaultError(t.vaultMismatch); return; }
+    setVaultBusy(true); setVaultError("");
+    try {
+      await pending.current;
+      await changeVaultPassword(secret.current ?? "", vaultNew);
+      secret.current = vaultNew; setVaultNew("");
+    } catch { setVaultError(t.vaultError); } finally { setVaultBusy(false); }
+  };
+  const exportVault = async () => {
+    if (vaultStatus !== "unlocked") return;
+    try {
+      await pending.current;
+      const data = await exportEncryptedVault(secret.current ?? "");
+      const destination = await save({ defaultPath: "dayoracle-journal.encrypted.json" });
+      if (destination) { await writeTextFile(destination, data); setBackupMessage(t.journalExportOk); }
+    } catch { setVaultError(t.vaultError); }
+  };
   const reflectionId = reflectionKey(birth, day);
   const reflection = reflections[reflectionId] ?? EMPTY_REFLECTION;
   const saveReflection = (change: Partial<DailyReflection>) => {
     const next = updateReflection(reflections, reflectionId, change);
     setReflections(next);
-    localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(next));
+    persist({ birthDate: birth, intentions, reflections: next });
   };
   const clearReflection = () => {
     const next = { ...reflections };
     delete next[reflectionId];
     setReflections(next);
-    localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(next));
+    persist({ birthDate: birth, intentions, reflections: next });
   };
-  const t = text[lang];
   const intention = intentions[day] ?? "";
   const entries = useMemo(() => journalEntries(birth, intentions, reflections), [birth, intentions, reflections]);
   const filteredEntries = useMemo(() => filterJournal(entries, journalQuery), [entries, journalQuery]);
   const exportJournal = async (format: "json" | "md") => {
     try {
+      if (vaultStatus === "unlocked" && !window.confirm(t.vaultPlainWarning)) return;
+      await pending.current;
       const backup = makeBackup(birth, intentions, reflections);
       const filename = format === "json" ? "dayoracle-journal.json" : "dayoracle-journal.md";
       const destination = await save({
@@ -258,8 +347,10 @@ export default function App() {
   };
   const clearJournal = () => {
     if (!window.confirm(t.journalClearConfirm)) return;
-    localStorage.removeItem("dayoracle-intentions");
-    localStorage.removeItem(REFLECTION_STORAGE_KEY);
+    if (vaultStatus === "unprotected") {
+      localStorage.removeItem("dayoracle-intentions");
+      localStorage.removeItem(REFLECTION_STORAGE_KEY);
+    } else persist({ birthDate: birth, intentions: {}, reflections: {} });
     setIntentions({});
     setReflections({});
     setJournalQuery("");
@@ -271,9 +362,8 @@ export default function App() {
     try {
       const backup = parseBackup(await file.text());
       if (!window.confirm(t.journalImportConfirm)) return;
-      localStorage.setItem("dayoracle-intentions", JSON.stringify(backup.intentions));
-      localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(backup.reflections));
-      localStorage.setItem("dayoracle-birth", backup.birthDate);
+      persist({ birthDate: backup.birthDate, intentions: backup.intentions, reflections: backup.reflections });
+      if (vaultStatus === "unprotected") localStorage.setItem("dayoracle-birth", backup.birthDate);
       setIntentions(backup.intentions);
       setReflections(backup.reflections);
       setBirth(backup.birthDate);
@@ -287,8 +377,10 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
-    if (birth) localStorage.setItem("dayoracle-birth", birth);
-    else localStorage.removeItem("dayoracle-birth");
+    if (statusRef.current === "unprotected") {
+      if (birth) localStorage.setItem("dayoracle-birth", birth);
+      else localStorage.removeItem("dayoracle-birth");
+    }
     if (!birth || birth > day) {
       setResult(null);
       setError(birth && birth > day ? "Birth date must be on or before the oracle date." : "");
@@ -308,16 +400,16 @@ export default function App() {
   const forget = () => {
     const remaining = clearBirthReflections(reflections, birth);
     setReflections(remaining);
-    localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(remaining));
+    persist({ birthDate: birth, intentions: {}, reflections: remaining });
     setBirth("");
     setResult(null);
     setIntentions({});
-    localStorage.removeItem("dayoracle-intentions");
+    if (vaultStatus === "unprotected") localStorage.removeItem("dayoracle-intentions");
   };
   const chooseIntention = (key: string) => {
     const next = { ...intentions, [day]: key };
     setIntentions(next);
-    localStorage.setItem("dayoracle-intentions", JSON.stringify(next));
+    persist({ birthDate: birth, intentions: next, reflections });
   };
   return (
     <main className="shell">
@@ -328,6 +420,15 @@ export default function App() {
         </select>
       </header>
 
+      {vaultStatus === "checking" && <section className="panel"><p>Checking journal security…</p>{vaultError && <p role="alert">{vaultError}</p>}</section>}
+      {vaultStatus === "locked" && <section className="panel journal-panel">
+        <h2>{t.vaultLocked}</h2><p>{t.vaultWarning}</p>
+        <label>{t.vaultPassword}<input type="password" autoComplete="off" value={vaultPassword}
+          onChange={e => setVaultPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void openVault(); }} /></label>
+        <button type="button" disabled={vaultBusy} onClick={() => { void openVault(); }}>{t.vaultUnlock}</button>
+        {vaultError && <p role="alert">{vaultError}</p>}
+      </section>}
+      {(vaultStatus === "unprotected" || vaultStatus === "unlocked") && <>
       <section className="inputs" aria-label="Oracle settings">
         <label>{t.birth}<input type="date" value={birth} max={day} onChange={(event) => setBirth(event.target.value)} /></label>
         <label>{t.date}<input type="date" value={day} min={birth || undefined} onChange={(event) => setDay(event.target.value)} /></label>
@@ -457,6 +558,21 @@ export default function App() {
           <div className="chart-heading"><h3>{t.timeline}</h3><span>{t.chartHint}</span></div>
           <BiorhythmChart timeline={result.timeline} today={result.date} lang={lang} onSelect={setDay} />
         </section>
+      </>}
+      <section className="panel journal-panel">
+        {vaultStatus === "unprotected" ? <>
+          <h3>{t.protect}</h3><p>{t.vaultWarning}</p>
+          <label>{t.vaultPassword}<input type="password" autoComplete="new-password" value={vaultPassword} onChange={e => setVaultPassword(e.target.value)} /></label>
+          <label>{t.vaultConfirm}<input type="password" autoComplete="new-password" value={vaultConfirm} onChange={e => setVaultConfirm(e.target.value)} /></label>
+          <button type="button" disabled={vaultBusy || !birth} onClick={() => { void enableVault(); }}>{t.vaultCreate}</button>
+        </> : <>
+          <button type="button" disabled={vaultBusy} onClick={() => { void lockVault(); }}>{t.vaultLock}</button>
+          <label>{t.vaultNew}<input type="password" autoComplete="new-password" value={vaultNew} onChange={e => setVaultNew(e.target.value)} /></label>
+          <button type="button" disabled={vaultBusy} onClick={() => { void updatePassword(); }}>{t.vaultChange}</button>
+          <button type="button" disabled={vaultBusy} onClick={() => { void exportVault(); }}>{t.vaultEncryptedExport}</button>
+        </>}
+        {vaultError && <p role="alert">{vaultError}</p>}
+      </section>
       </>}
       <footer>{t.disclaimer} · v0.1.0-alpha.1</footer>
     </main>
