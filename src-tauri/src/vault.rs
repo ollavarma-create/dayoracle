@@ -141,6 +141,13 @@ pub fn vault_export(app: tauri::AppHandle, password: String) -> Result<String, S
     Ok(raw)
 }
 
+// Decrypt an external backup without touching the active vault.
+// The frontend validates the journal schema before offering replacement.
+#[tauri::command]
+pub fn vault_preview_import(password: String, encrypted_json: String) -> Result<String, String> {
+    decrypt(&password, &encrypted_json)
+}
+
 #[tauri::command]
 pub fn vault_import(
     app: tauri::AppHandle,
