@@ -885,7 +885,7 @@ export default function App() {
                 {assessmentError && <p role="alert">{assessmentError}</p>}
               </>
             )}
-          </div> 
+          </div>}
         </section>
         <section className="bottom-grid">
           <div className="panel">
