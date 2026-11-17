@@ -9,7 +9,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![biorhythm::get_biorhythms,
             vault::vault_exists, vault::vault_create, vault::vault_read,
             vault::vault_write, vault::vault_change_password,
-            vault::vault_export, vault::vault_import])
+            vault::vault_export, vault::vault_import, vault::vault_preview_import])
         .run(tauri::generate_context!())
         .expect("failed to run DayOracle");
 }
