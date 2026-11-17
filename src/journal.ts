@@ -15,15 +15,14 @@ export function journalEntries(
   intentions: Record<string, string>,
   reflections: ReflectionStore,
 ): JournalEntry[] {
-  if (!DATE.test(birth)) return [];
   const entries = new Map<string, JournalEntry>();
   for (const [date, intention] of Object.entries(intentions)) {
-    if (!DATE.test(date) || !intention || date < birth) continue;
+    if (!DATE.test(date) || !intention) continue;
     entries.set(date, { date, intention, status: "", note: "" });
   }
   for (const [key, reflection] of Object.entries(reflections)) {
     const [entryBirth, date, extra] = key.split("|");
-    if (entryBirth !== birth || extra !== undefined || !DATE.test(date) || date < birth) continue;
+    if (!DATE.test(entryBirth) || extra !== undefined || !DATE.test(date)) continue;
     if (!reflection.status && !reflection.note.trim()) continue;
     const previous = entries.get(date) ?? { date, intention: "", status: "" as const, note: "" };
     entries.set(date, { ...previous, status: reflection.status, note: reflection.note });
