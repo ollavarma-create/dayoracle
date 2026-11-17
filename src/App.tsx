@@ -210,17 +210,6 @@ export default function App() {
           <h2>{oracleMessage(result.values, persona, lang, day, birth)}</h2>
           <p className="subtle">{t.days}: {result.daysLived.toLocaleString(lang)}</p>
         </section>
-        <section className="score-grid">
-          {(["physical","emotional","intellectual"] as const).map((name) =>
-            <div className="score panel" key={name}>
-              <span>{t[name]}</span><strong>{result.values[name] > 0 ? "+" : ""}{result.values[name]}%</strong>
-              <div className="score-track"><div style={{width:`${(result.values[name]+100)/2}%`}} /></div>
-            </div>)}
-        </section>
-        <section className="panel">
-          <div className="chart-heading"><h3>{t.timeline}</h3><span>{t.chartHint}</span></div>
-          <BiorhythmChart timeline={result.timeline} today={result.date} lang={lang} onSelect={setDay} />
-        </section>
         <section className="bottom-grid">
           <div className="panel">
             <div className="eyebrow">✧ {t.quote}</div>
@@ -240,6 +229,17 @@ export default function App() {
             </div>
             {intention && <p className="intention-saved" role="status">✓ {t.intentionSaved}</p>}
           </div>
+        </section>
+        <section className="score-grid">
+          {(["physical","emotional","intellectual"] as const).map((name) =>
+            <div className="score panel" key={name}>
+              <span>{t[name]}</span><strong>{result.values[name] > 0 ? "+" : ""}{result.values[name]}%</strong>
+              <div className="score-track"><div style={{width:`${(result.values[name]+100)/2}%`}} /></div>
+            </div>)}
+        </section>
+        <section className="panel">
+          <div className="chart-heading"><h3>{t.timeline}</h3><span>{t.chartHint}</span></div>
+          <BiorhythmChart timeline={result.timeline} today={result.date} lang={lang} onSelect={setDay} />
         </section>
       </>}
       <footer>{t.disclaimer} · v0.1.0-alpha.1</footer>
