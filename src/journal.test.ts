@@ -15,15 +15,22 @@ test("shows reflection-only days and sorts newest first", () => {
   });
   assert.deepEqual(rows.map(row => row.date), ["2026-11-18", "2026-11-16"]);
 });
-test("does not expose other birth dates' reflections", () => {
+test("retains reflections associated with an earlier birth date", () => {
   const rows = journalEntries(birth, {}, {
     "1999-01-01|2026-11-17": { status: "done", note: "Private" },
   });
-  assert.deepEqual(rows, []);
+  assert.deepEqual(rows, [{ date: "2026-11-17", intention: "", status: "done", note: "Private" }]);
 });
-test("ignores empty, invalid, and pre-birth entries", () => {
+test("ignores empty and invalid entries", () => {
   const rows = journalEntries(birth, { "1999-01-01": "kind", invalid: "pause" }, {
     "2000-01-01|2026-11-17": { status: "", note: "  " },
   });
-  assert.deepEqual(rows, []);
+  assert.deepEqual(rows, [{ date: "1999-01-01", intention: "kind", status: "", note: "" }]);
+});
+
+test("history survives forgetting birth date", () => {
+  const rows = journalEntries("", { "2026-11-17": "kind" }, {
+    "2000-01-01|2026-11-16": { status: "partly", note: "Earlier reflection" },
+  });
+  assert.deepEqual(rows.map(row => row.date), ["2026-11-17", "2026-11-16"]);
 });
