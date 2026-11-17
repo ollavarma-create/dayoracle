@@ -10,13 +10,31 @@ Built with **Rust, Tauri 2, React, and TypeScript**. Interface languages: **Engl
 
 ## Screenshots
 
-Screenshots will be added before the first downloadable alpha release.
+Screenshots from a pre-release development build (some footer labels still show v0.1.0-alpha.1).
 
-<!-- Save screenshots to docs/images/ and uncomment:
-![DayOracle daily perspective](docs/images/dayoracle-daily.png)
-![DayOracle forecast history](docs/images/dayoracle-history.png)
-![DayOracle biorhythms](docs/images/dayoracle-biorhythms.png)
--->
+### Daily perspective
+
+![DayOracle daily perspective and optional retrospective assessment](docs/images/main-screen.png)
+
+### Daily biorhythms
+
+![Interactive biorhythm chart](docs/images/daily-biorythm.png)
+
+### Mystic oracle
+
+![Mystic daily perspective, philosophical thought and daily intention](docs/images/mystic-daily-perspective.png)
+
+### Forecast history
+
+![Saved forecasts with original-language text and optional assessment](docs/images/forecast-history.png)
+
+Saved forecasts preserve their original language and wording even when the interface language changes.
+
+### Journal
+
+![Journal entries and local export options](docs/images/journal-entries.png)
+
+Additional screenshots, including the Skeptic persona, settings and encrypted journal lock screen, are available in [docs/images](docs/images/).
 
 ## Features
 
