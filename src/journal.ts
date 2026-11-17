@@ -11,7 +11,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Read-only chronological projection; never scores or interprets the user's entries. */
 export function journalEntries(
-  birth: string,
+  _birth: string,
   intentions: Record<string, string>,
   reflections: ReflectionStore,
 ): JournalEntry[] {
