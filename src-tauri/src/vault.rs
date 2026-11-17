@@ -248,6 +248,26 @@ pub async fn vault_import(
 mod tests {
     use super::*;
     #[test]
+    fn atomic_write_replaces_existing_vault_with_complete_ciphertext() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal.vault.json");
+        let old = encrypt("test password", r#"{"note":"old"}"#).unwrap();
+        let new = encrypt("test password", r#"{"note":"new"}"#).unwrap();
+
+        atomic_write(&path, &old).unwrap();
+        assert_eq!(
+            decrypt("test password", &read_vault(&path).unwrap()).unwrap(),
+            r#"{"note":"old"}"#
+        );
+
+        atomic_write(&path, &new).unwrap();
+        assert_eq!(
+            decrypt("test password", &read_vault(&path).unwrap()).unwrap(),
+            r#"{"note":"new"}"#
+        );
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+    #[test]
     fn roundtrip_and_wrong_password() {
         let original = r#"{"birthDate":"2000-01-01","note":"päiväkirja"}"#;
         let encrypted = encrypt("correct horse battery staple", original).unwrap();
