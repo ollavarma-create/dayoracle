@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createVault, unlockVault, writeVault, vaultExists, changeVaultPassword, exportEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
+import { createVault, unlockVault, writeVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
@@ -40,7 +40,7 @@ const text = {
     backToOracle: "Back to oracle",
     journal: "Journal",
     journalTitle: "Your days, in your own words",
-    settings: "Settings", settingsClose: "Close settings", passwordSettings: "Change password", protect: "Protect journal", vaultPassword: "Password", vaultConfirm: "Confirm password", vaultCreate: "Enable encryption", vaultUnlock: "Unlock", vaultLock: "Lock journal", vaultLocked: "Journal locked", vaultWarning: "No password recovery is available. Keep your password safe.", vaultMismatch: "Passwords must match and contain at least 12 characters.", vaultError: "Vault operation failed. Check your password or try again.", vaultNew: "New password", vaultChange: "Change password", vaultEncryptedExport: "Export encrypted backup", vaultPlainWarning: "This export is NOT encrypted. Continue?",
+    settings: "Settings", settingsClose: "Close settings", passwordSettings: "Change password", protect: "Protect journal", vaultPassword: "Password", vaultConfirm: "Confirm password", vaultCreate: "Enable encryption", vaultUnlock: "Unlock", vaultLock: "Lock journal", vaultLocked: "Journal locked", vaultWarning: "No password recovery is available. Keep your password safe.", vaultMismatch: "Passwords must match and contain at least 12 characters.", vaultError: "Vault operation failed. Check your password or try again.", vaultNew: "New password", vaultChange: "Change password", vaultEncryptedExport: "Export encrypted backup", vaultEncryptedImport: "Restore encrypted backup", vaultBackupPassword: "Backup password", vaultImportConfirm: "Replace the current encrypted journal with this backup? This cannot be undone.", vaultImportOk: "Encrypted backup restored", vaultImportError: "Restore failed. Check the backup password and file.", vaultPlainWarning: "This export is NOT encrypted. Continue?",
     journalSearch: "Search journal",
     journalClear: "Clear journal",
     journalClearConfirm: "Delete all saved intentions and reflections on this device? Your birth date and settings will be kept. This cannot be undone.",
@@ -98,7 +98,7 @@ const text = {
     backToOracle: "Takaisin oraakkeliin",
     journal: "Päiväkirja",
     journalTitle: "Omat päiväsi, omin sanoin",
-    settings: "Asetukset", settingsClose: "Sulje asetukset", passwordSettings: "Vaihda salasana", protect: "Suojaa päiväkirja", vaultPassword: "Salasana", vaultConfirm: "Vahvista salasana", vaultCreate: "Ota salaus käyttöön", vaultUnlock: "Avaa", vaultLock: "Lukitse päiväkirja", vaultLocked: "Päiväkirja lukittu", vaultWarning: "Salasanaa ei voi palauttaa. Säilytä se huolellisesti.", vaultMismatch: "Salasanojen on täsmättävä ja oltava vähintään 12 merkkiä.", vaultError: "Salaustoiminto epäonnistui. Tarkista salasana tai yritä uudelleen.", vaultNew: "Uusi salasana", vaultChange: "Vaihda salasana", vaultEncryptedExport: "Vie salattu varmuuskopio", vaultPlainWarning: "Tämä vienti EI ole salattu. Jatketaanko?",
+    settings: "Asetukset", settingsClose: "Sulje asetukset", passwordSettings: "Vaihda salasana", protect: "Suojaa päiväkirja", vaultPassword: "Salasana", vaultConfirm: "Vahvista salasana", vaultCreate: "Ota salaus käyttöön", vaultUnlock: "Avaa", vaultLock: "Lukitse päiväkirja", vaultLocked: "Päiväkirja lukittu", vaultWarning: "Salasanaa ei voi palauttaa. Säilytä se huolellisesti.", vaultMismatch: "Salasanojen on täsmättävä ja oltava vähintään 12 merkkiä.", vaultError: "Salaustoiminto epäonnistui. Tarkista salasana tai yritä uudelleen.", vaultNew: "Uusi salasana", vaultChange: "Vaihda salasana", vaultEncryptedExport: "Vie salattu varmuuskopio", vaultEncryptedImport: "Palauta salattu varmuuskopio", vaultBackupPassword: "Varmuuskopion salasana", vaultImportConfirm: "Korvataanko nykyinen salattu päiväkirja tällä varmuuskopiolla? Tätä ei voi perua.", vaultImportOk: "Salattu varmuuskopio palautettu", vaultImportError: "Palautus epäonnistui. Tarkista varmuuskopion salasana ja tiedosto.", vaultPlainWarning: "Tämä vienti EI ole salattu. Jatketaanko?",
     journalSearch: "Hae päiväkirjasta",
     journalClear: "Tyhjennä päiväkirja",
     journalClearConfirm: "Poistetaanko kaikki tälle laitteelle tallennetut aikomukset ja pohdinnat? Syntymäpäivä ja asetukset säilyvät. Tätä ei voi perua.",
@@ -218,6 +218,8 @@ export default function App() {
   const [vaultPassword, setVaultPassword] = useState("");
   const [vaultConfirm, setVaultConfirm] = useState("");
   const [vaultNew, setVaultNew] = useState("");
+  const [backupPassword, setBackupPassword] = useState("");
+  const [backupImportOpen, setBackupImportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [passwordSettingsOpen, setPasswordSettingsOpen] = useState(false);
   const [vaultError, setVaultError] = useState("");
@@ -292,7 +294,7 @@ export default function App() {
     if (vaultBusy || vaultStatus !== "unlocked") return;
     setVaultBusy(true); await pending.current;
     secret.current = null; setBirth(""); setIntentions({}); setReflections({});
-    setVaultPassword(""); setVaultNew(""); setJournalQuery(""); setSettingsOpen(false); setPasswordSettingsOpen(false); lastBirth.current = null; setStatus("locked");
+    setVaultPassword(""); setVaultNew(""); setBackupPassword(""); setBackupImportOpen(false); setJournalQuery(""); setSettingsOpen(false); setPasswordSettingsOpen(false); lastBirth.current = null; setStatus("locked");
     setVaultBusy(false);
   };
   const updatePassword = async () => {
@@ -313,6 +315,23 @@ export default function App() {
       const destination = await save({ defaultPath: "dayoracle-journal.encrypted.json" });
       if (destination) { await writeTextFile(destination, data); setBackupMessage(t.journalExportOk); }
     } catch { setVaultError(t.vaultError); }
+  };
+  const restoreEncryptedVault = async (file: File | undefined) => {
+    if (!file || vaultStatus !== "unlocked" || vaultBusy) return;
+    if (file.size > 4_000_000) { setVaultError(t.vaultImportError); return; }
+    setVaultBusy(true); setVaultError(""); setBackupMessage("");
+    try {
+      const data = await previewEncryptedVault(backupPassword, await file.text());
+      if (!window.confirm(t.vaultImportConfirm)) return;
+      await pending.current;
+      await writeVault(secret.current ?? "", data);
+      lastBirth.current = data.birthDate;
+      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections);
+      setDay(localToday());
+      setBackupPassword(""); setBackupImportOpen(false);
+      setBackupMessage(t.vaultImportOk);
+    } catch { setVaultError(t.vaultImportError); }
+    finally { setVaultBusy(false); }
   };
   const reflectionId = reflectionKey(birth, day);
   const reflection = reflections[reflectionId] ?? EMPTY_REFLECTION;
@@ -470,7 +489,13 @@ export default function App() {
             <button type="button" className="muted-button" aria-expanded={passwordSettingsOpen}
               onClick={() => { setPasswordSettingsOpen(!passwordSettingsOpen); setVaultNew(""); setVaultError(""); }}>{t.passwordSettings}</button>
             <button type="button" disabled={vaultBusy} onClick={() => { void exportVault(); }}>{t.vaultEncryptedExport}</button>
+            <button type="button" className="muted-button" disabled={vaultBusy} aria-expanded={backupImportOpen}
+              onClick={() => { setBackupImportOpen(!backupImportOpen); setBackupPassword(""); setVaultError(""); }}>{t.vaultEncryptedImport}</button>
           </div>
+          {backupImportOpen && <div style={{ display: "grid", gap: "0.75rem", maxWidth: "360px", marginTop: "1rem" }}>
+            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultBackupPassword}<input type="password" autoComplete="off" value={backupPassword} onChange={e => setBackupPassword(e.target.value)} /></label>
+            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultEncryptedImport}<input type="file" accept=".json,application/json" disabled={vaultBusy || !backupPassword} onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; void restoreEncryptedVault(file); }} /></label>
+          </div>}
           {passwordSettingsOpen && <div style={{ display: "grid", gap: "0.75rem", maxWidth: "360px", marginTop: "1rem" }}>
             <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultNew}<input type="password" autoComplete="new-password"
               value={vaultNew} onChange={e => setVaultNew(e.target.value)} /></label>
