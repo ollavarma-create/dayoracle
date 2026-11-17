@@ -10,12 +10,12 @@ function validDate(s:string):boolean {
   return parsed.getUTCFullYear()===y && parsed.getUTCMonth()===m-1 && parsed.getUTCDate()===d;
 }
 export function makeBackup(birthDate:string, intentions:Record<string,string>, reflections:ReflectionStore):JournalBackup {
-  if(!validDate(birthDate)) throw new Error("Invalid birth date");
+  if(birthDate!==""&&!validDate(birthDate)) throw new Error("Invalid birth date");
   const safeIntentions:Record<string,string>={};
-  for(const [date,value] of Object.entries(intentions)) if(validDate(date)&&date>=birthDate&&INTENTIONS.has(value)) safeIntentions[date]=value;
+  for(const [date,value] of Object.entries(intentions)) if(validDate(date)&&INTENTIONS.has(value)) safeIntentions[date]=value;
   const safeReflections=parseReflections(JSON.stringify(reflections));
   return {format:"dayoracle-journal",version:1,birthDate,intentions:safeIntentions,
-    reflections:Object.fromEntries(Object.entries(safeReflections).filter(([key])=>key.startsWith(birthDate+"|")))};
+    reflections:safeReflections};
 }
 export function parseBackup(raw:string):JournalBackup {
   if(raw.length>2_000_000) throw new Error("Backup too large");
@@ -23,12 +23,12 @@ export function parseBackup(raw:string):JournalBackup {
   try {parsed=JSON.parse(raw);} catch {throw new Error("Invalid JSON");}
   if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)) throw new Error("Invalid backup");
   const data=parsed as Record<string,unknown>;
-  if(data.format!=="dayoracle-journal"||data.version!==1||typeof data.birthDate!=="string"||!validDate(data.birthDate)) throw new Error("Invalid backup header");
+  if(data.format!=="dayoracle-journal"||data.version!==1||typeof data.birthDate!=="string"||(data.birthDate!==""&&!validDate(data.birthDate))) throw new Error("Invalid backup header");
   if(!data.intentions||typeof data.intentions!=="object"||Array.isArray(data.intentions)||!data.reflections||typeof data.reflections!=="object"||Array.isArray(data.reflections)) throw new Error("Invalid backup entries");
-  for(const [date,value] of Object.entries(data.intentions)) if(!validDate(date)||date<data.birthDate||typeof value!=="string"||!INTENTIONS.has(value)) throw new Error("Invalid intention");
+  for(const [date,value] of Object.entries(data.intentions)) if(!validDate(date)||typeof value!=="string"||!INTENTIONS.has(value)) throw new Error("Invalid intention");
   for(const [key,value] of Object.entries(data.reflections)) {
     const [birth,date,extra]=key.split("|");
-    if(birth!==data.birthDate||extra!==undefined||!validDate(date)||date<birth||!value||typeof value!=="object"||Array.isArray(value)) throw new Error("Invalid reflection");
+    if(!validDate(birth)||extra!==undefined||!validDate(date)||!value||typeof value!=="object"||Array.isArray(value)) throw new Error("Invalid reflection");
     const r=value as Record<string,unknown>;
     if(!["","done","partly","not-today"].includes(String(r.status))||typeof r.note!=="string"||r.note.length>500) throw new Error("Invalid reflection content");
   }
