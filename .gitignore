@@ -1,0 +1,21 @@
+# JavaScript
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Rust / Tauri
+target/
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/.tauri/
+*.rs.bk
+
+# Editor / local
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.env
+.env.*
+!.env.example
