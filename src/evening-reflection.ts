@@ -15,7 +15,7 @@ export function parseReflections(raw: string | null): ReflectionStore {
     if (!input || typeof input !== "object" || Array.isArray(input)) return {};
     const result: ReflectionStore = {};
     for (const [key, value] of Object.entries(input)) {
-      if (!/^\\d{4}-\\d{2}-\\d{2}\\|\\d{4}-\\d{2}-\\d{2}$/.test(key)) continue;
+      if (!/^\d{4}-\d{2}-\d{2}\|\d{4}-\d{2}-\d{2}$/.test(key)) continue;
       if (!value || typeof value !== "object" || Array.isArray(value)) continue;
       const candidate = value as Record<string, unknown>;
       const status = candidate.status;
