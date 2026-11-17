@@ -650,11 +650,13 @@ export default function App() {
   const [assessmentRating, setAssessmentRating] = useState<ForecastRating>("unsure");
   const [assessmentError, setAssessmentError] = useState("");
   const [assessmentFeedback, setAssessmentFeedback] = useState<"idle" | "saving" | "saved">("idle");
+  const [assessmentExpanded, setAssessmentExpanded] = useState(false);
   useEffect(() => {
     setAssessmentRating(savedForecast?.assessment?.rating ?? "unsure");
     setAssessmentNote(savedForecast?.assessment?.note ?? "");
     setAssessmentError("");
     setAssessmentFeedback("idle");
+    setAssessmentExpanded(false);
   }, [day, savedForecast?.assessment?.updatedAt]);
   const saveAssessment = async () => {
     if (!savedForecast || assessmentFeedback === "saving") return;
@@ -668,6 +670,7 @@ export default function App() {
       // A vault write must reach disk before showing a success message.
       if (statusRef.current === "unlocked") await flushVault();
       setAssessmentFeedback("saved");
+      setAssessmentExpanded(false);
     } catch (cause) {
       setAssessmentFeedback("idle");
       setAssessmentError(String(cause));
@@ -827,14 +830,40 @@ export default function App() {
               {new Date(savedForecast.createdAt).getHours() >= 18 && <span> · {lang === "fi" ? "Näytetty ensi kertaa illalla" : "First viewed in the evening"}</span>}
             </span>}
           </p>
-          {savedForecast && mayAssess(day, clockNow, assessmentTime) && <div className="panel" style={{ marginTop: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem 1rem", flexWrap: "wrap" }}>
-              <h3 style={{ margin: 0 }}>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button type="button" disabled={assessmentFeedback === "saving"} onClick={() => { void saveAssessment(); }}>{assessmentFeedback === "saving" ? (lang === "fi" ? "Tallennetaan…" : "Saving…") : (lang === "fi" ? "Tallenna arvio" : "Save assessment")}</button>
-                {assessmentFeedback === "saved" && <span role="status" className="subtle">{lang === "fi" ? "✓ Arvio tallennettu" : "✓ Assessment saved"}</span>}
+          {savedForecast && mayAssess(day, clockNow, assessmentTime) && <div className="panel" style={{ marginTop: "0.75rem", padding: "0.85rem 1rem" }}>
+            {!assessmentExpanded ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem 1rem" }}>
+                <div style={{ minWidth: 0, flex: "1 1 260px" }}>
+                  <strong>{savedForecast.assessment
+                    ? (lang === "fi" ? "Ennusteen arvio" : "Forecast assessment") + ": " + ({
+                        yes: lang === "fi" ? "Osui" : "Felt accurate",
+                        partial: lang === "fi" ? "Osittain" : "Partly",
+                        no: lang === "fi" ? "Ei osunut" : "Did not fit",
+                        unsure: lang === "fi" ? "En osaa sanoa" : "Unsure"
+                      }[savedForecast.assessment.rating])
+                    : (lang === "fi" ? "Ennustetta ei ole vielä arvioitu" : "Forecast not yet assessed")}</strong>
+                  {savedForecast.assessment?.note && <p className="subtle" style={{ margin: "0.25rem 0 0", overflowWrap: "anywhere" }}>{savedForecast.assessment.note}</p>}
+                </div>
+                <button type="button" onClick={() => setAssessmentExpanded(true)}>
+                  {savedForecast.assessment ? (lang === "fi" ? "Muokkaa arviota" : "Edit assessment") : (lang === "fi" ? "Arvioi ennuste" : "Assess forecast")}
+                </button>
               </div>
-            </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem 1rem" }}>
+                  <h3 style={{ margin: 0 }}>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <button type="button" disabled={assessmentFeedback === "saving"} onClick={() => { void saveAssessment(); }}>
+                      {assessmentFeedback === "saving" ? (lang === "fi" ? "Tallennetaan…" : "Saving…") : (lang === "fi" ? "Tallenna arvio" : "Save assessment")}
+                    </button>
+                    <button type="button" className="muted-button" disabled={assessmentFeedback === "saving"} onClick={() => {
+                      setAssessmentRating(savedForecast.assessment?.rating ?? "unsure");
+                      setAssessmentNote(savedForecast.assessment?.note ?? "");
+                      setAssessmentError("");
+                      setAssessmentExpanded(false);
+                    }}>{lang === "fi" ? "Peruuta" : "Cancel"}</button>
+                  </div>
+                </div>
             <p className="subtle">{lang === "fi" ? "Oma tulkintasi, ei ennusteen tieteellinen osuvuus." : "Your subjective impression, not scientific predictive accuracy."}</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "0.75rem", alignItems: "start", marginTop: "0.75rem" }}>
               <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
@@ -852,8 +881,11 @@ export default function App() {
               </label>
             </div>
 
-            {assessmentError && <p role="alert">{assessmentError}</p>}
-          </div>}
+
+                {assessmentError && <p role="alert">{assessmentError}</p>}
+              </>
+            )}
+          </div> 
         </section>
         <section className="bottom-grid">
           <div className="panel">
