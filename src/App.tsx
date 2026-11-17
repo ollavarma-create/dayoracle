@@ -34,7 +34,7 @@ const text = {
     eveningNotToday: "Not today",
     eveningNote: "One observation (optional)",
     eveningPlaceholder: "A small detail worth remembering…",
-    eveningSaved: "Saved privately on this device",
+    eveningSaved: "Saved privately on this device", savePending: "Unsaved changes", saveSaving: "Encrypting and saving…", saveError: "Save failed — do not close",
     eveningClear: "Clear this reflection",
     timeline: "Your cosmic curves",
     showBiorhythms: "Daily biorhythms",
@@ -92,7 +92,7 @@ const text = {
     eveningNotToday: "En tänään",
     eveningNote: "Yksi havainto (vapaaehtoinen)",
     eveningPlaceholder: "Pieni asia, jonka haluat muistaa…",
-    eveningSaved: "Tallennettu yksityisesti tälle laitteelle",
+    eveningSaved: "Tallennettu yksityisesti tälle laitteelle", savePending: "Tallentamattomia muutoksia", saveSaving: "Salataan ja tallennetaan…", saveError: "Tallennus epäonnistui — älä sulje",
     eveningClear: "Tyhjennä tämä pohdinta",
     timeline: "Kosmiset käyräsi",
     showBiorhythms: "Päivän biorytmit",
@@ -402,6 +402,7 @@ export default function App() {
     setReflections(next);
     persist({ birthDate: birth, intentions, reflections: next });
   };
+  const saveLabel = vaultStatus === "unlocked" && saveState !== "saved" ? (saveState === "pending" ? t.savePending : saveState === "saving" ? t.saveSaving : t.saveError) : null;
   const intention = intentions[day] ?? "";
   const entries = useMemo(() => journalEntries(birth, intentions, reflections), [birth, intentions, reflections]);
   const filteredEntries = useMemo(() => filterJournal(entries, journalQuery), [entries, journalQuery]);
@@ -613,7 +614,7 @@ export default function App() {
                 <button type="button" className={intention===key?"intent active":"intent"} key={key}
                   onClick={() => chooseIntention(key)} aria-pressed={intention===key}>{t[key]}</button>)}
             </div>
-            {intention && <p className="intention-saved" role="status">✓ {t.intentionSaved}</p>}
+            {intention && <p className="intention-saved" role="status">{saveLabel ?? `✓ ${t.intentionSaved}`}</p>}
           </div>
         </section>
         <section className="panel evening-panel" aria-label={t.evening}>
@@ -636,7 +637,7 @@ export default function App() {
               onChange={(event) => saveReflection({ note: event.target.value })} />
           </label>
           {(reflection.status || reflection.note) && <div className="evening-actions">
-            <span role="status">✓ {t.eveningSaved}</span>
+            <span role="status">{saveLabel ?? `✓ ${t.eveningSaved}`}</span>
             <button type="button" className="evening-clear" onClick={clearReflection}>{t.eveningClear}</button>
           </div>}
         </section>
