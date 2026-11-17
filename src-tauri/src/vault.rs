@@ -146,11 +146,18 @@ pub fn vault_export(app: tauri::AppHandle, password: String) -> Result<String, S
 }
 
 #[tauri::command]
-pub fn vault_import(app: tauri::AppHandle, password: String, encrypted_json: String) -> Result<(), String> {
+pub fn vault_import(
+    app: tauri::AppHandle,
+    password: String,
+    encrypted_json: String,
+) -> Result<(), String> {
     let plaintext = Zeroizing::new(decrypt(&password, &encrypted_json)?);
-    let _: serde_json::Value = serde_json::from_str(&plaintext).map_err(|_| "Invalid journal JSON")?;
+    let _: serde_json::Value =
+        serde_json::from_str(&plaintext).map_err(|_| "Invalid journal JSON")?;
     let path = vault_path(&app)?;
-    if path.exists() { return Err("Encrypted journal already exists; import requires an empty vault".into()); }
+    if path.exists() {
+        return Err("Encrypted journal already exists; import requires an empty vault".into());
+    }
     atomic_write(&path, &encrypted_json)
 }
 
@@ -162,7 +169,10 @@ mod tests {
         let original = r#"{"birthDate":"2000-01-01","note":"päiväkirja"}"#;
         let encrypted = encrypt("correct horse battery staple", original).unwrap();
         assert!(!encrypted.contains("päiväkirja"));
-        assert_eq!(decrypt("correct horse battery staple", &encrypted).unwrap(), original);
+        assert_eq!(
+            decrypt("correct horse battery staple", &encrypted).unwrap(),
+            original
+        );
         assert!(decrypt("wrong", &encrypted).is_err());
     }
     #[test]
