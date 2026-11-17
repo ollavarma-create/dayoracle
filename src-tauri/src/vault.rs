@@ -244,6 +244,29 @@ pub async fn vault_import(
     .map_err(|e| format!("Vault worker failed: {e}"))?
 }
 
+// Delete only after authenticating the existing vault. External backups are untouched.
+fn delete_authenticated_vault(path: &Path, password: &str) -> Result<(), String> {
+    decrypt(password, &read_vault(path)?)?;
+    fs::remove_file(path).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        let parent = path.parent().ok_or("Invalid vault location")?;
+        fs::File::open(parent)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|e| format!("Vault directory sync failed: {e}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn vault_delete(app: tauri::AppHandle, password: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        delete_authenticated_vault(&vault_path(&app)?, &password)
+    })
+    .await
+    .map_err(|e| format!("Vault worker failed: {e}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,6 +289,20 @@ mod tests {
             r#"{"note":"new"}"#
         );
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+    #[test]
+    fn deleting_vault_requires_correct_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal.vault.json");
+        atomic_write(
+            &path,
+            &encrypt("correct password", r#"{"birthDate":"2000-01-01"}"#).unwrap(),
+        )
+        .unwrap();
+        assert!(delete_authenticated_vault(&path, "wrong password").is_err());
+        assert!(path.exists());
+        delete_authenticated_vault(&path, "correct password").unwrap();
+        assert!(!path.exists());
     }
     #[test]
     fn roundtrip_and_wrong_password() {

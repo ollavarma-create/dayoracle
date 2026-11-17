@@ -3,12 +3,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createVault, unlockVault, writeVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
+import { createVault, unlockVault, writeVault, deleteVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
 import { VaultSaveQueue } from "./vault-save-queue";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
-import { clearBirthReflections, EMPTY_REFLECTION, parseReflections, reflectionKey, REFLECTION_STORAGE_KEY, updateReflection, type DailyReflection } from "./evening-reflection";
+import { EMPTY_REFLECTION, parseReflections, reflectionKey, REFLECTION_STORAGE_KEY, updateReflection, type DailyReflection } from "./evening-reflection";
 
 
 type Cycles = { physical: number; emotional: number; intellectual: number };
@@ -47,6 +47,7 @@ const text = {
     journalClear: "Clear journal",
     journalClearConfirm: "Delete all saved intentions and reflections on this device? Your birth date and settings will be kept. This cannot be undone.",
     journalClearDone: "Journal cleared",
+    dangerZone: "Danger zone", resetAll: "Start over", resetDescription: "Delete all local journal data, birth date and encryption password. External backups remain untouched.", resetPassword: "Current journal password", resetConfirm: "Type DELETE to confirm", resetConfirmWord: "DELETE", resetWarning: "This permanently removes all local DayOracle journal data and password protection. External backups are not deleted. Continue?", resetDone: "DayOracle was reset. You can start again.", resetError: "Reset failed. Your journal has not been cleared in the interface.", forgetHint: "Only the birth date will be forgotten. Journal entries and encryption remain.",
     journalExportOk: "Export saved",
     journalExportError: "Could not save export",
     journalSearchPlaceholder: "Search dates, intentions or notes…",
@@ -105,6 +106,7 @@ const text = {
     journalClear: "Tyhjennä päiväkirja",
     journalClearConfirm: "Poistetaanko kaikki tälle laitteelle tallennetut aikomukset ja pohdinnat? Syntymäpäivä ja asetukset säilyvät. Tätä ei voi perua.",
     journalClearDone: "Päiväkirja tyhjennetty",
+    dangerZone: "Vaaralliset toiminnot", resetAll: "Aloita alusta", resetDescription: "Poistaa paikallisen päiväkirjan, syntymäpäivän ja salasanasuojauksen. Erilliset varmuuskopiot säilyvät.", resetPassword: "Päiväkirjan nykyinen salasana", resetConfirm: "Kirjoita POISTA vahvistukseksi", resetConfirmWord: "POISTA", resetWarning: "Tämä poistaa pysyvästi paikallisen DayOracle-päiväkirjan ja salasanasuojauksen. Erillisiä varmuuskopioita ei poisteta. Jatketaanko?", resetDone: "DayOracle nollattu. Voit aloittaa alusta.", resetError: "Nollaus epäonnistui. Käyttöliittymän päiväkirjatietoja ei tyhjennetty.", forgetHint: "Vain syntymäpäivä unohdetaan. Päiväkirja ja salaus säilyvät.",
     journalExportOk: "Vientitiedosto tallennettu",
     journalExportError: "Vientitiedoston tallennus epäonnistui",
     journalSearchPlaceholder: "Hae päivämääriä, aikomuksia tai havaintoja…",
@@ -216,6 +218,9 @@ export default function App() {
   const [view, setView] = useState<"oracle" | "biorhythms" | "journal">("oracle");
   const [journalQuery, setJournalQuery] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirmation, setResetConfirmation] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
   const [vaultStatus, setVaultStatus] = useState<VaultStatus>("checking");
   const [vaultPassword, setVaultPassword] = useState("");
   const [vaultConfirm, setVaultConfirm] = useState("");
@@ -284,6 +289,18 @@ export default function App() {
   const setStatus = (status: VaultStatus) => { statusRef.current = status; setVaultStatus(status); };
 
   const [birth, setBirth] = useState(() => localStorage.getItem("dayoracle-birth") ?? "");
+  const validBirthInput = (value: string) => value === "" || (/^\d{4}-\d{2}-\d{2}$/.test(value) && value >= "1800-01-01" && value <= localToday() && !Number.isNaN(new Date(value + "T12:00:00").getTime()) && new Date(value + "T12:00:00").toISOString().slice(0, 10) === value);
+  const [birthDraft, setBirthDraft] = useState(birth);
+  const [birthInputError, setBirthInputError] = useState("");
+  useEffect(() => { setBirthDraft(birth); setBirthInputError(""); }, [birth]);
+  const commitBirthDraft = () => {
+    if (!validBirthInput(birthDraft) || (birthDraft === "" && birth !== "")) {
+      setBirthInputError(lang === "fi" ? "Virheellinen syntymäpäivä. Valitse päivämäärä väliltä 1.1.1800–tänään." : "Invalid birth date. Choose a date from 1800-01-01 through today.");
+      return;
+    }
+    setBirthInputError("");
+    if (birthDraft !== birth) setBirth(birthDraft);
+  };
   const [day, setDay] = useState(localToday);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
@@ -297,6 +314,7 @@ export default function App() {
   const [reflections, setReflections] = useState(() => parseReflections(localStorage.getItem(REFLECTION_STORAGE_KEY)));
   const t = text[lang];
   const persist = (state: VaultState) => {
+    if (!validBirthInput(state.birthDate)) return;
     if (statusRef.current === "unlocked" && secret.current) {
       saveQueue.current!.stage(state);
       setSaveState("pending");
@@ -426,16 +444,72 @@ export default function App() {
       setBackupMessage(t.journalExportOk);
     } catch { setBackupMessage(t.journalExportError); }
   };
-  const clearJournal = () => {
-    if (!window.confirm(t.journalClearConfirm)) return;
-    if (vaultStatus === "unprotected") {
+  const clearJournal = async () => {
+    if (vaultBusy || !window.confirm(t.journalClearConfirm)) return;
+    setVaultBusy(true);
+    try {
+      const empty = { birthDate: birth, intentions: {}, reflections: {} };
+      if (vaultStatus === "unlocked") {
+        await flushVault();
+        await writeVault(secret.current ?? "", empty);
+      } else {
+        localStorage.removeItem("dayoracle-intentions");
+        localStorage.removeItem(REFLECTION_STORAGE_KEY);
+      }
+      setIntentions({});
+      setReflections({});
+      setJournalQuery("");
+      setBackupMessage(t.journalClearDone);
+    } catch (error) {
+      console.error("Journal clear failed:", error);
+      setVaultError(t.vaultError);
+    } finally {
+      setVaultBusy(false);
+    }
+  };
+  const resetAll = async () => {
+    if (vaultBusy || resetConfirmation !== t.resetConfirmWord ||
+        (vaultStatus === "unlocked" && !resetPassword)) return;
+    if (!window.confirm(t.resetWarning)) return;
+    setVaultBusy(true);
+    setVaultError("");
+    try {
+      if (vaultStatus === "unlocked") {
+        await flushVault();
+        await deleteVault(resetPassword);
+      }
+      if (saveTimer.current !== null) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      secret.current = null;
+      localStorage.removeItem("dayoracle-birth");
       localStorage.removeItem("dayoracle-intentions");
       localStorage.removeItem(REFLECTION_STORAGE_KEY);
-    } else persist({ birthDate: birth, intentions: {}, reflections: {} });
-    setIntentions({});
-    setReflections({});
-    setJournalQuery("");
-    setBackupMessage(t.journalClearDone);
+      lastBirth.current = null;
+      setStatus("unprotected");
+      setBirth("");
+      setIntentions({});
+      setReflections({});
+      setResult(null);
+      setJournalQuery("");
+      setVaultPassword("");
+      setVaultConfirm("");
+      setVaultNew("");
+      setVaultNewConfirm("");
+      setBackupPassword("");
+      setResetPassword("");
+      setResetConfirmation("");
+      setResetOpen(false);
+      setPasswordSettingsOpen(false);
+      setBackupImportOpen(false);
+      setBackupMessage(t.resetDone);
+    } catch (error) {
+      console.error("DayOracle reset failed:", error);
+      setVaultError(t.resetError);
+    } finally {
+      setVaultBusy(false);
+    }
   };
   const importJournal = async (file: File | undefined) => {
     if (!file) return;
@@ -458,7 +532,12 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
-    if (statusRef.current === "unlocked" && birth && lastBirth.current !== null && lastBirth.current !== birth) {
+    if (!validBirthInput(birth)) {
+      setResult(null);
+      setError(lang === "fi" ? "Tarkista syntymäpäivä (aikaisintaan 1.1.1800)." : "Check birth date (earliest 1800-01-01).");
+      return;
+    }
+    if (statusRef.current === "unlocked" && lastBirth.current !== null && lastBirth.current !== birth) {
       persist({ birthDate: birth, intentions, reflections });
     }
     lastBirth.current = birth;
@@ -483,13 +562,11 @@ export default function App() {
 
   const quote = useMemo(() => quotes[lang][Array.from(day).reduce((sum, char) => sum + char.charCodeAt(0), 0) % quotes[lang].length], [lang, day]);
   const forget = () => {
-    const remaining = clearBirthReflections(reflections, birth);
-    setReflections(remaining);
-    persist({ birthDate: birth, intentions: {}, reflections: remaining });
+    if (vaultBusy || !window.confirm(t.forgetHint)) return;
+    // Keep the existing journal entries and reflections, even when the birth date is cleared.
+    // The birth-date effect stages the new state for encrypted journals.
     setBirth("");
     setResult(null);
-    setIntentions({});
-    if (vaultStatus === "unprotected") localStorage.removeItem("dayoracle-intentions");
   };
   const chooseIntention = (key: string) => {
     const next = { ...intentions, [day]: key };
@@ -573,10 +650,25 @@ export default function App() {
             {passwordChangeMessage && <p role="status">{passwordChangeMessage}</p>}
           </div>}
         </>}
+        <div style={{ marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid #51627a" }}>
+          <h3>{t.dangerZone}</h3>
+          <p className="subtle">{t.journalClearConfirm}</p>
+          <button type="button" className="muted-button journal-clear-all" disabled={vaultBusy} onClick={() => { void clearJournal(); }}>{t.journalClear}</button>
+          <p className="subtle">{t.resetDescription}</p>
+          <button type="button" className="muted-button journal-clear-all" disabled={vaultBusy} aria-expanded={resetOpen}
+            onClick={() => { setResetOpen(!resetOpen); setResetPassword(""); setResetConfirmation(""); }}>{t.resetAll}</button>
+          {resetOpen && <div style={{ display: "grid", gap: "0.75rem", maxWidth: "360px", marginTop: "1rem" }}>
+            {vaultStatus === "unlocked" && <label>{t.resetPassword}<input type="password" autoComplete="off" value={resetPassword} onChange={e => setResetPassword(e.target.value)} /></label>}
+            <label>{t.resetConfirm}<input type="text" autoComplete="off" value={resetConfirmation} onChange={e => setResetConfirmation(e.target.value)} /></label>
+            <button type="button" disabled={vaultBusy || resetConfirmation !== t.resetConfirmWord || (vaultStatus === "unlocked" && !resetPassword)}
+              onClick={() => { void resetAll(); }}>{t.resetAll}</button>
+          </div>}
+        </div>
         {vaultError && <p role="alert">{vaultError}</p>}
+        {backupMessage && <p role="status">{backupMessage}</p>}
       </section>}
       <section className="inputs" aria-label="Oracle settings">
-        <label>{t.birth}<input type="date" value={birth} max={day} onChange={(event) => setBirth(event.target.value)} /></label>
+        <label>{t.birth}<input type="date" value={birthDraft} min="1800-01-01" max={localToday()} aria-invalid={Boolean(birthInputError)} onChange={(event) => { setBirthDraft(event.target.value); setBirthInputError(""); }} onBlur={commitBirthDraft} />{birthInputError && <span role="alert" style={{ color: "#f5a7a7", fontSize: "0.85rem" }}>{birthInputError}</span>}</label>
         <label>{t.date}<input type="date" value={day} min={birth || undefined} onChange={(event) => setDay(event.target.value)} /></label>
         <label>{lang === "fi" ? "Oraakkeli" : "Oracle persona"}
           <select value={persona} onChange={(event) => setPersona(event.target.value as Persona)}>
@@ -666,7 +758,6 @@ export default function App() {
               }} />
             </label>
           </div>
-          <button type="button" className="muted-button journal-clear-all" onClick={clearJournal}>{t.journalClear}</button>
           <small>{t.journalBackupNote}</small>
           {backupMessage && <p role="status">{backupMessage}</p>}
         </div>
