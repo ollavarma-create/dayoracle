@@ -107,53 +107,72 @@ pub fn vault_exists(app: tauri::AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn vault_create(app: tauri::AppHandle, password: String, journal_json: String) -> Result<(), String> {
+pub async fn vault_create(app: tauri::AppHandle, password: String, journal_json: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let path = vault_path(&app)?;
     if path.exists() { return Err("Encrypted journal already exists".into()); }
     let encrypted = encrypt(&password, &journal_json)?;
     atomic_write(&path, &encrypted)
+
+    }).await.map_err(|e| format!("Vault worker failed: {e}"))?
 }
 
 #[tauri::command]
-pub fn vault_read(app: tauri::AppHandle, password: String) -> Result<String, String> {
+pub async fn vault_read(app: tauri::AppHandle, password: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     decrypt(&password, &read_vault(&vault_path(&app)?)?)
+
+    }).await.map_err(|e| format!("Vault worker failed: {e}"))?
 }
 
 #[tauri::command]
-pub fn vault_write(app: tauri::AppHandle, password: String, journal_json: String) -> Result<(), String> {
+pub async fn vault_write(app: tauri::AppHandle, password: String, journal_json: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let path = vault_path(&app)?;
     // Never overwrite an existing vault without authenticating the old ciphertext.
     decrypt(&password, &read_vault(&path)?)?;
     atomic_write(&path, &encrypt(&password, &journal_json)?)
+
+    }).await.map_err(|e| format!("Vault worker failed: {e}"))?
 }
 
 #[tauri::command]
-pub fn vault_change_password(app: tauri::AppHandle, old_password: String, new_password: String) -> Result<(), String> {
+pub async fn vault_change_password(app: tauri::AppHandle, old_password: String, new_password: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let path = vault_path(&app)?;
     let plaintext = Zeroizing::new(decrypt(&old_password, &read_vault(&path)?)?);
     atomic_write(&path, &encrypt(&new_password, &plaintext)?)
+
+    }).await.map_err(|e| format!("Vault worker failed: {e}"))?
 }
 
 #[tauri::command]
-pub fn vault_export(app: tauri::AppHandle, password: String) -> Result<String, String> {
+pub async fn vault_export(app: tauri::AppHandle, password: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let raw = read_vault(&vault_path(&app)?)?;
     decrypt(&password, &raw)?; // Verify password and integrity before returning ciphertext.
     Ok(raw)
+
+    }).await.map_err(|e| format!("Vault worker failed: {e}"))?
 }
 
 // Decrypt an external backup without touching the active vault.
 // The frontend validates the journal schema before offering replacement.
 #[tauri::command]
-pub fn vault_preview_import(password: String, encrypted_json: String) -> Result<String, String> {
+pub async fn vault_preview_import(password: String, encrypted_json: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     decrypt(&password, &encrypted_json)
+
+    }).await.map_err(|e| format!("Vault worker failed: {e}"))?
 }
 
 #[tauri::command]
-pub fn vault_import(
+pub async fn vault_import(
     app: tauri::AppHandle,
     password: String,
     encrypted_json: String,
 ) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let plaintext = Zeroizing::new(decrypt(&password, &encrypted_json)?);
     let _: serde_json::Value =
         serde_json::from_str(&plaintext).map_err(|_| "Invalid journal JSON")?;
@@ -162,6 +181,8 @@ pub fn vault_import(
         return Err("Encrypted journal already exists; import requires an empty vault".into());
     }
     atomic_write(&path, &encrypted_json)
+
+    }).await.map_err(|e| format!("Vault worker failed: {e}"))?
 }
 
 #[cfg(test)]
