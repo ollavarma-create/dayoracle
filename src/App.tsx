@@ -5,6 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createVault, unlockVault, writeVault, deleteVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
+import { addForecast, mayAssess, assessForecast, forecastStats, type ForecastHistory, type ForecastRating, type AssessmentTime, validAssessmentTime } from "./forecast-history";
 import { VaultSaveQueue } from "./vault-save-queue";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
@@ -215,7 +216,7 @@ function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]
 export default function App() {
   const [lang, setLang] = useState<Locale>(() => localStorage.getItem("dayoracle-lang") === "fi" ? "fi" : "en");
   const [persona, setPersona] = useState<Persona>("mystic");
-  const [view, setView] = useState<"oracle" | "biorhythms" | "journal">("oracle");
+  const [view, setView] = useState<"oracle" | "biorhythms" | "journal" | "history">("oracle");
   const [journalQuery, setJournalQuery] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const [resetPassword, setResetPassword] = useState("");
@@ -230,6 +231,28 @@ export default function App() {
   const [backupPassword, setBackupPassword] = useState("");
   const [backupImportOpen, setBackupImportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [assessmentTime, setAssessmentTime] = useState<AssessmentTime>(() => {
+    const stored = localStorage.getItem("dayoracle-assessment-time") ?? "18:00";
+    return validAssessmentTime(stored) ? stored as AssessmentTime : "18:00";
+  });
+  const [clockNow, setClockNow] = useState(() => new Date());
+  useEffect(() => {
+    // Refresh on the next minute boundary, including when the application stays open.
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      setClockNow(new Date());
+      timer = setTimeout(tick, 60_000 - Date.now() % 60_000 + 50);
+    };
+    timer = setTimeout(tick, 60_000 - Date.now() % 60_000 + 50);
+    return () => clearTimeout(timer);
+  }, []);
+  const changeAssessmentTime = (value: string) => {
+    if (!validAssessmentTime(value)) return;
+    setAssessmentTime(value as AssessmentTime);
+    localStorage.setItem("dayoracle-assessment-time", value);
+    setClockNow(new Date());
+  };
+
   const [passwordSettingsOpen, setPasswordSettingsOpen] = useState(false);
   const [vaultError, setVaultError] = useState("");
   const [vaultBusy, setVaultBusy] = useState(false);
@@ -312,9 +335,16 @@ export default function App() {
     return {};
   });
   const [reflections, setReflections] = useState(() => parseReflections(localStorage.getItem(REFLECTION_STORAGE_KEY)));
+  const [forecasts, setForecasts] = useState<ForecastHistory>(() => {
+    try { return parseBackup(localStorage.getItem("dayoracle-forecast-backup") ?? "").forecasts; }
+    catch { return {}; }
+  });
+  const forecastsRef = useRef(forecasts);
+  forecastsRef.current = forecasts;
   const t = text[lang];
   const persist = (state: VaultState) => {
     if (!validBirthInput(state.birthDate)) return;
+    state = { ...state, forecasts: state.forecasts ?? forecastsRef.current };
     if (statusRef.current === "unlocked" && secret.current) {
       saveQueue.current!.stage(state);
       setSaveState("pending");
@@ -325,6 +355,7 @@ export default function App() {
     } else if (statusRef.current === "unprotected") {
       localStorage.setItem("dayoracle-intentions", JSON.stringify(state.intentions));
       localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(state.reflections));
+      localStorage.setItem("dayoracle-forecast-backup", JSON.stringify(makeBackup(state.birthDate, state.intentions, state.reflections, state.forecasts)));
     }
   };
   useEffect(() => {
@@ -335,7 +366,8 @@ export default function App() {
         localStorage.removeItem("dayoracle-intentions");
         localStorage.removeItem(REFLECTION_STORAGE_KEY);
         localStorage.removeItem("dayoracle-birth");
-        setBirth(""); setIntentions({}); setReflections({});
+        localStorage.removeItem("dayoracle-forecast-backup");
+        setBirth(""); setIntentions({}); setReflections({}); setForecasts({});
         setStatus("locked");
       } else setStatus("unprotected");
     }).catch(() => { if (active) setVaultError("Vault detection failed. Restart DayOracle."); });
@@ -346,7 +378,7 @@ export default function App() {
     if (vaultPassword.length < 12 || vaultPassword !== vaultConfirm) { setVaultError(t.vaultMismatch); return; }
     setVaultBusy(true); setVaultError("");
     try {
-      await createVault(vaultPassword, { birthDate: birth, intentions, reflections });
+      await createVault(vaultPassword, { birthDate: birth, intentions, reflections, forecasts });
       secret.current = vaultPassword;
       localStorage.removeItem("dayoracle-intentions");
       localStorage.removeItem(REFLECTION_STORAGE_KEY);
@@ -360,7 +392,7 @@ export default function App() {
     try {
       const data = await unlockVault(vaultPassword);
       secret.current = vaultPassword;
-      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections);
+      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections); setForecasts(data.forecasts ?? {});
       setVaultPassword(""); lastBirth.current = data.birthDate; setStatus("unlocked");
     } catch { setVaultError(t.vaultError); } finally { setVaultBusy(false); }
   };
@@ -368,7 +400,7 @@ export default function App() {
     if (vaultBusy || vaultStatus !== "unlocked") return;
     setVaultBusy(true); setVaultError("");
     try { await flushVault(); } catch { setVaultBusy(false); return; }
-    secret.current = null; setBirth(""); setIntentions({}); setReflections({});
+    secret.current = null; setBirth(""); setIntentions({}); setReflections({}); setForecasts({});
     setVaultPassword(""); setVaultNew(""); setBackupPassword(""); setBackupImportOpen(false); setJournalQuery(""); setSettingsOpen(false); setPasswordSettingsOpen(false); lastBirth.current = null; setStatus("locked");
     setVaultBusy(false);
   };
@@ -402,7 +434,7 @@ export default function App() {
       await flushVault();
       await writeVault(secret.current ?? "", data);
       lastBirth.current = data.birthDate;
-      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections);
+      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections); setForecasts(data.forecasts ?? {});
       setDay(localToday());
       setBackupPassword(""); setBackupImportOpen(false);
       setBackupMessage(t.vaultImportOk);
@@ -426,11 +458,14 @@ export default function App() {
   const intention = intentions[day] ?? "";
   const entries = useMemo(() => journalEntries(birth, intentions, reflections), [birth, intentions, reflections]);
   const filteredEntries = useMemo(() => filterJournal(entries, journalQuery), [entries, journalQuery]);
+  const historicalForecasts = useMemo(() => Object.values(forecasts).sort((a, b) => b.date.localeCompare(a.date)), [forecasts]);
+  const forecastCounts = useMemo(() => forecastStats(forecasts), [forecasts]);
+
   const exportJournal = async (format: "json" | "md") => {
     try {
       if (vaultStatus === "unlocked" && !window.confirm(t.vaultPlainWarning)) return;
       if (vaultStatus === "unlocked") await flushVault();
-      const backup = makeBackup(birth, intentions, reflections);
+      const backup = makeBackup(birth, intentions, reflections, forecasts);
       const filename = format === "json" ? "dayoracle-journal.json" : "dayoracle-journal.md";
       const destination = await save({
         defaultPath: filename,
@@ -448,7 +483,7 @@ export default function App() {
     if (vaultBusy || !window.confirm(t.journalClearConfirm)) return;
     setVaultBusy(true);
     try {
-      const empty = { birthDate: birth, intentions: {}, reflections: {} };
+      const empty = { birthDate: birth, intentions: {}, reflections: {}, forecasts: {} };
       if (vaultStatus === "unlocked") {
         await flushVault();
         await writeVault(secret.current ?? "", empty);
@@ -458,6 +493,8 @@ export default function App() {
       }
       setIntentions({});
       setReflections({});
+      setForecasts({});
+      localStorage.removeItem("dayoracle-forecast-backup");
       setJournalQuery("");
       setBackupMessage(t.journalClearDone);
     } catch (error) {
@@ -486,11 +523,13 @@ export default function App() {
       localStorage.removeItem("dayoracle-birth");
       localStorage.removeItem("dayoracle-intentions");
       localStorage.removeItem(REFLECTION_STORAGE_KEY);
+      localStorage.removeItem("dayoracle-forecast-backup");
       lastBirth.current = null;
       setStatus("unprotected");
       setBirth("");
       setIntentions({});
       setReflections({});
+      setForecasts({});
       setResult(null);
       setJournalQuery("");
       setVaultPassword("");
@@ -525,7 +564,7 @@ export default function App() {
       }
       const backup = parseBackup(raw);
       if (!window.confirm(t.journalImportConfirm)) return;
-      const restored = { birthDate: backup.birthDate, intentions: backup.intentions, reflections: backup.reflections };
+      const restored = { birthDate: backup.birthDate, intentions: backup.intentions, reflections: backup.reflections, forecasts: backup.forecasts };
       if (vaultStatus === "unlocked") {
         setVaultBusy(true);
         try {
@@ -538,12 +577,14 @@ export default function App() {
       } else if (vaultStatus === "unprotected") {
         localStorage.setItem("dayoracle-intentions", JSON.stringify(restored.intentions));
         localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(restored.reflections));
+        localStorage.setItem("dayoracle-forecast-backup", JSON.stringify(backup));
         localStorage.setItem("dayoracle-birth", restored.birthDate);
       } else {
         throw new Error("Journal unavailable");
       }
       setIntentions(restored.intentions);
       setReflections(restored.reflections);
+      setForecasts(restored.forecasts);
       setBirth(restored.birthDate);
       setDay(localToday());
       setBackupMessage(t.journalImportOk);
@@ -585,6 +626,59 @@ export default function App() {
       });
     return () => { active = false; };
   }, [birth, day]);
+
+  // Only a forecast actually viewed today is recorded; never backfill missed dates.
+  useEffect(() => {
+    if (vaultStatus !== "unprotected" && vaultStatus !== "unlocked") return;
+    if (view !== "oracle" || !result || error || !birth || day !== localToday()) return;
+    if (forecastsRef.current[day]) return;
+    const now = new Date();
+    const snapshot = { date: day, birthDateAtCreation: birth, persona, locale: lang,
+      message: oracleMessage(result.values, persona, lang, day, birth), createdAt: now.toISOString() };
+    const next = addForecast(forecastsRef.current, snapshot);
+    if (next === forecastsRef.current) return;
+    // Stage synchronously so a quick persona/language change cannot overwrite the first snapshot.
+    forecastsRef.current = next;
+    try {
+      persist({ birthDate: birth, intentions, reflections, forecasts: next });
+      setForecasts(next);
+    } catch (cause) {
+      forecastsRef.current = forecasts;
+      setVaultError(String(cause));
+    }
+  }, [vaultStatus, view, result, error, birth, day, persona, lang]);
+
+  const savedForecast = forecasts[day];
+  const [assessmentNote, setAssessmentNote] = useState("");
+  const [assessmentRating, setAssessmentRating] = useState<ForecastRating>("unsure");
+  const [assessmentError, setAssessmentError] = useState("");
+  const [assessmentFeedback, setAssessmentFeedback] = useState<"idle" | "saving" | "saved">("idle");
+  const [assessmentExpanded, setAssessmentExpanded] = useState(false);
+  useEffect(() => {
+    setAssessmentRating(savedForecast?.assessment?.rating ?? "unsure");
+    setAssessmentNote(savedForecast?.assessment?.note ?? "");
+    setAssessmentError("");
+    setAssessmentFeedback("idle");
+    setAssessmentExpanded(false);
+  }, [day, savedForecast?.assessment?.updatedAt]);
+  const saveAssessment = async () => {
+    if (!savedForecast || assessmentFeedback === "saving") return;
+    setAssessmentFeedback("saving");
+    setAssessmentError("");
+    try {
+      const next = assessForecast(forecastsRef.current, day, assessmentRating, assessmentNote, new Date(), assessmentTime);
+      persist({ birthDate: birth, intentions, reflections, forecasts: next });
+      forecastsRef.current = next;
+      setForecasts(next);
+      // A vault write must reach disk before showing a success message.
+      if (statusRef.current === "unlocked") await flushVault();
+      setAssessmentFeedback("saved");
+      setAssessmentExpanded(false);
+    } catch (cause) {
+      setAssessmentFeedback("idle");
+      setAssessmentError(String(cause));
+    }
+  };
 
   const quote = useMemo(() => quotes[lang][Array.from(day).reduce((sum, char) => sum + char.charCodeAt(0), 0) % quotes[lang].length], [lang, day]);
   const forget = () => {
@@ -637,6 +731,20 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
           <h2 style={{ margin: 0 }}>{t.settings}</h2>
           <button type="button" className="muted-button" aria-label={t.settingsClose} title={t.settingsClose} style={{ borderRadius: "50%", width: "2.4rem", height: "2.4rem", padding: 0, display: "grid", placeItems: "center", fontSize: "1.15rem" }} onClick={() => { setSettingsOpen(false); setPasswordSettingsOpen(false); setBackupImportOpen(false); setPasswordChangeMessage(""); setVaultError(""); }}>×</button>
+        </div>
+        <div style={{ marginTop: "1rem", marginBottom: "1rem" }}>
+          <label style={{ display: "grid", gap: "0.4rem", maxWidth: "360px" }}>
+            {lang === "fi" ? "Päivän arviointiaika" : "Daily assessment time"}
+            <select value={assessmentTime} onChange={e => changeAssessmentTime(e.target.value)}>
+              <option value="15:00">{lang === "fi" ? "15.00 – Työpäivän jälkeen" : "15:00 – After work"}</option>
+              <option value="18:00">{lang === "fi" ? "18.00 – Oletus" : "18:00 – Default"}</option>
+              <option value="21:00">{lang === "fi" ? "21.00 – Illalla" : "21:00 – Evening"}</option>
+              <option value="any">{lang === "fi" ? "Milloin tahansa" : "Anytime"}</option>
+            </select>
+          </label>
+          <p className="subtle">{lang === "fi"
+            ? "Paikallinen asetus. Aiemmat arviot säilyvät, eikä arviointia vaadita."
+            : "Local setting. Existing assessments are preserved; rating is optional."}</p>
         </div>
         {vaultStatus === "unprotected" ? <>
           <h3>{t.protect}</h3><p>{t.vaultWarning}</p>
@@ -709,6 +817,10 @@ export default function App() {
           onClick={() => setView(view === "journal" ? "oracle" : "journal")}>
           {view === "journal" ? t.backToOracle : t.journal}
         </button>
+        <button type="button" className="muted-button" aria-pressed={view === "history"}
+          onClick={() => setView(view === "history" ? "oracle" : "history")}>
+          {view === "history" ? t.backToOracle : (lang === "fi" ? "Ennustehistoria" : "Forecast history")}
+        </button>
         <button type="button" className="muted-button" onClick={() => setDay(localToday())}>{t.backToToday}</button>
         {birth && <button className="muted-button" onClick={forget}>{t.forget}</button>}
       </section>
@@ -718,8 +830,69 @@ export default function App() {
       {result && !error && view === "oracle" && <>
         <section className="hero panel">
           <div className="eyebrow">✦ {t.perspective}</div>
-          <h2>{oracleMessage(result.values, persona, lang, day, birth)}</h2>
-          <p className="subtle">{t.days}: {result.daysLived.toLocaleString(lang)}</p>
+          <h2>{savedForecast?.message ?? oracleMessage(result.values, persona, lang, day, birth)}</h2>
+          <p className="subtle" style={{ display: "flex", gap: "0.5rem 1.25rem", flexWrap: "wrap" }}>
+            <span>{lang === "fi" ? "Ikä" : "Age"}: {Math.max(0, Number(day.slice(0, 4)) - Number(birth.slice(0, 4)) - (day.slice(5) < birth.slice(5) ? 1 : 0))} {lang === "fi" ? "vuotta" : "years"}</span>
+            {savedForecast && <span>{lang === "fi" ? "Tallennettu ennuste" : "Saved forecast"} · {new Date(savedForecast.createdAt).toLocaleString(lang)}
+              {new Date(savedForecast.createdAt).getHours() >= 18 && <span> · {lang === "fi" ? "Näytetty ensi kertaa illalla" : "First viewed in the evening"}</span>}
+            </span>}
+          </p>
+          {savedForecast && mayAssess(day, clockNow, assessmentTime) && <div className="panel" style={{ marginTop: "0.75rem", padding: "0.85rem 1rem" }}>
+            {!assessmentExpanded ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem 1rem" }}>
+                <div style={{ minWidth: 0, flex: "1 1 260px" }}>
+                  <strong>{savedForecast.assessment
+                    ? (lang === "fi" ? "Ennusteen arvio" : "Forecast assessment") + ": " + ({
+                        yes: lang === "fi" ? "Osui" : "Felt accurate",
+                        partial: lang === "fi" ? "Osittain" : "Partly",
+                        no: lang === "fi" ? "Ei osunut" : "Did not fit",
+                        unsure: lang === "fi" ? "En osaa sanoa" : "Unsure"
+                      }[savedForecast.assessment.rating])
+                    : (lang === "fi" ? "Ennustetta ei ole vielä arvioitu" : "Forecast not yet assessed")}</strong>
+                  {savedForecast.assessment?.note && <p className="subtle" style={{ margin: "0.25rem 0 0", overflowWrap: "anywhere" }}>{savedForecast.assessment.note}</p>}
+                </div>
+                <button type="button" onClick={() => setAssessmentExpanded(true)}>
+                  {savedForecast.assessment ? (lang === "fi" ? "Muokkaa arviota" : "Edit assessment") : (lang === "fi" ? "Arvioi ennuste" : "Assess forecast")}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem 1rem" }}>
+                  <h3 style={{ margin: 0 }}>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <button type="button" disabled={assessmentFeedback === "saving"} onClick={() => { void saveAssessment(); }}>
+                      {assessmentFeedback === "saving" ? (lang === "fi" ? "Tallennetaan…" : "Saving…") : (lang === "fi" ? "Tallenna arvio" : "Save assessment")}
+                    </button>
+                    <button type="button" className="muted-button" disabled={assessmentFeedback === "saving"} onClick={() => {
+                      setAssessmentRating(savedForecast.assessment?.rating ?? "unsure");
+                      setAssessmentNote(savedForecast.assessment?.note ?? "");
+                      setAssessmentError("");
+                      setAssessmentExpanded(false);
+                    }}>{lang === "fi" ? "Peruuta" : "Cancel"}</button>
+                  </div>
+                </div>
+            <p className="subtle">{lang === "fi" ? "Oma tulkintasi, ei ennusteen tieteellinen osuvuus." : "Your subjective impression, not scientific predictive accuracy."}</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "0.75rem", alignItems: "start", marginTop: "0.75rem" }}>
+              <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
+                {lang === "fi" ? "Arvio" : "Rating"}
+                <select style={{ width: "100%", minWidth: 0, height: "42px", boxSizing: "border-box", fontSize: "0.9rem", padding: "0 2.4rem 0 0.75rem", lineHeight: "normal" }} value={assessmentRating} onChange={e => { setAssessmentRating(e.target.value as ForecastRating); setAssessmentFeedback("idle"); }}>
+                  <option value="unsure">{lang === "fi" ? "En osaa sanoa" : "Unsure"}</option>
+                  <option value="yes">{lang === "fi" ? "Osui" : "Felt accurate"}</option>
+                  <option value="partial">{lang === "fi" ? "Osittain" : "Partly"}</option>
+                  <option value="no">{lang === "fi" ? "Ei osunut" : "Did not fit"}</option>
+                </select>
+              </label>
+              <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
+                {lang === "fi" ? "Huomio (vapaaehtoinen)" : "Note (optional)"}
+                <textarea style={{ width: "100%", minWidth: 0, boxSizing: "border-box", height: "54px", minHeight: "54px", resize: "vertical" }} maxLength={500} value={assessmentNote} onChange={e => { setAssessmentNote(e.target.value); setAssessmentFeedback("idle"); }} />
+              </label>
+            </div>
+
+
+                {assessmentError && <p role="alert">{assessmentError}</p>}
+              </>
+            )}
+          </div>}
         </section>
         <section className="bottom-grid">
           <div className="panel">
@@ -766,6 +939,44 @@ export default function App() {
           </div>}
         </section>
       </>}
+      {(vaultStatus === "unprotected" || vaultStatus === "unlocked") && view === "history" && <section className="panel journal-panel">
+        <div className="eyebrow">✦ {lang === "fi" ? "ENNUSTEHISTORIA" : "FORECAST HISTORY"}</div>
+        <h2>{lang === "fi" ? "Tallennetut ennusteet" : "Saved forecasts"}</h2>
+        <p className="subtle">{lang === "fi"
+          ? "Vain päivät, jolloin ennuste todella avattiin. Puuttuvia päiviä ei täytetä eikä arvioimattomia tulkita epäonnistumisiksi."
+          : "Only days when a forecast was actually viewed. Missing days are not backfilled; unrated forecasts are not failures."}</p>
+        <p className="subtle">{lang === "fi" ? "Ennusteita" : "Forecasts"}: {historicalForecasts.length}
+          {" · "}{lang === "fi" ? "Arvioitu" : "Rated"}: {forecastCounts.rated}
+          {" · "}{lang === "fi" ? "Arvioimatta" : "Unrated"}: {historicalForecasts.length - forecastCounts.rated}</p>
+        {historicalForecasts.length === 0 ? <p className="subtle">{lang === "fi"
+          ? "Ei vielä tallennettuja ennusteita. Historiaan kertyy vain todella katsottuja päiviä."
+          : "No saved forecasts yet. History grows only on days you actually view a forecast."}</p> :
+          <div className="journal-list">
+            {historicalForecasts.map((forecast) => {
+              const rating = forecast.assessment?.rating;
+              const ratingLabel = rating ? ({
+                yes: lang === "fi" ? "Osui" : "Felt accurate",
+                partial: lang === "fi" ? "Osittain" : "Partly",
+                no: lang === "fi" ? "Ei osunut" : "Did not fit",
+                unsure: lang === "fi" ? "En osaa sanoa" : "Unsure"
+              }[rating]) : (lang === "fi" ? "Ei arviota" : "Not rated");
+              return <article className="journal-entry" key={forecast.date}>
+                <div className="journal-entry-header"><strong>{forecast.date}</strong>
+                  <span className="subtle">{ratingLabel}</span>
+                </div>
+                <p style={{ overflowWrap: "anywhere" }}>{forecast.message}</p>
+                <p className="subtle">{lang === "fi" ? "Näytetty" : "Viewed"}: {new Date(forecast.createdAt).toLocaleString(lang)}
+                  {" · "}{forecast.locale.toUpperCase()} · {forecast.persona === "mystic" ? (lang === "fi" ? "Mystikko" : "Mystic") : (lang === "fi" ? "Skeptikko" : "Skeptic")}
+                  {new Date(forecast.createdAt).getHours() >= 18 && <> · {lang === "fi" ? "Ensi kertaa illalla" : "First viewed in evening"}</>}
+                </p>
+                {forecast.assessment?.note && <p style={{ overflowWrap: "anywhere" }}>{forecast.assessment.note}</p>}
+              </article>;
+            })}
+          </div>}
+        <p className="subtle">{lang === "fi"
+          ? "Arviot kuvaavat omaa kokemusta, eivät ennusteiden tieteellistä osuvuutta."
+          : "Ratings describe personal impressions, not scientific predictive accuracy."}</p>
+      </section>}
       {birth && !error && view === "journal" && <section className="panel journal-panel">
         <div className="eyebrow">✦ {t.journal}</div>
         <h2>{t.journalTitle}</h2>

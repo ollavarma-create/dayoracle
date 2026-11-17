@@ -1,17 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { makeBackup, parseBackup, type JournalBackup } from "./journal-backup";
+import type { ForecastHistory } from "./forecast-history";
 import type { ReflectionStore } from "./evening-reflection";
 
-export type VaultState = { birthDate: string; intentions: Record<string, string>; reflections: ReflectionStore };
+export type VaultState = { birthDate: string; intentions: Record<string, string>; reflections: ReflectionStore; forecasts?: ForecastHistory };
 export type VaultStatus = "checking" | "unprotected" | "locked" | "unlocked";
 
 export function serializeVault(state: VaultState): string {
-  return JSON.stringify(makeBackup(state.birthDate, state.intentions, state.reflections));
+  return JSON.stringify(makeBackup(state.birthDate, state.intentions, state.reflections, state.forecasts ?? {}));
 }
 
 export function deserializeVault(raw: string): VaultState {
   const parsed: JournalBackup = parseBackup(raw);
-  return { birthDate: parsed.birthDate, intentions: parsed.intentions, reflections: parsed.reflections };
+  return { birthDate: parsed.birthDate, intentions: parsed.intentions, reflections: parsed.reflections, forecasts: parsed.forecasts };
 }
 
 export async function vaultExists(): Promise<boolean> {
