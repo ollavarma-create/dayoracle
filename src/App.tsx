@@ -831,7 +831,7 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "0.75rem", alignItems: "start", marginTop: "0.75rem" }}>
               <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
                 {lang === "fi" ? "Arvio" : "Rating"}
-                <select style={{ width: "100%", minWidth: 0, height: "42px", boxSizing: "border-box" }} value={assessmentRating} onChange={e => { setAssessmentRating(e.target.value as ForecastRating); setAssessmentFeedback("idle"); }}>
+                <select style={{ width: "100%", minWidth: 0, height: "42px", boxSizing: "border-box", fontSize: "0.9rem", padding: "0 2.4rem 0 0.75rem", lineHeight: "normal" }} value={assessmentRating} onChange={e => { setAssessmentRating(e.target.value as ForecastRating); setAssessmentFeedback("idle"); }}>
                   <option value="unsure">{lang === "fi" ? "En osaa sanoa" : "Unsure"}</option>
                   <option value="yes">{lang === "fi" ? "Osui" : "Felt accurate"}</option>
                   <option value="partial">{lang === "fi" ? "Osittain" : "Partly"}</option>
