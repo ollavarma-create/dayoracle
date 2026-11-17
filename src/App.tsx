@@ -1035,7 +1035,7 @@ export default function App() {
       </>}
 
       </>}
-      <footer>{t.disclaimer} · v0.1.0-alpha.1</footer>
+      <footer>{t.disclaimer} · v0.2.0-alpha.1</footer>
     </main>
   );
 }
