@@ -5,7 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createVault, unlockVault, writeVault, deleteVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
-import { addForecast, mayAssess, assessForecast, type ForecastHistory, type ForecastRating, type AssessmentTime, validAssessmentTime } from "./forecast-history";
+import { addForecast, mayAssess, assessForecast, forecastStats, type ForecastHistory, type ForecastRating, type AssessmentTime, validAssessmentTime } from "./forecast-history";
 import { VaultSaveQueue } from "./vault-save-queue";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
@@ -216,7 +216,7 @@ function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]
 export default function App() {
   const [lang, setLang] = useState<Locale>(() => localStorage.getItem("dayoracle-lang") === "fi" ? "fi" : "en");
   const [persona, setPersona] = useState<Persona>("mystic");
-  const [view, setView] = useState<"oracle" | "biorhythms" | "journal">("oracle");
+  const [view, setView] = useState<"oracle" | "biorhythms" | "journal" | "history">("oracle");
   const [journalQuery, setJournalQuery] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const [resetPassword, setResetPassword] = useState("");
@@ -458,6 +458,9 @@ export default function App() {
   const intention = intentions[day] ?? "";
   const entries = useMemo(() => journalEntries(birth, intentions, reflections), [birth, intentions, reflections]);
   const filteredEntries = useMemo(() => filterJournal(entries, journalQuery), [entries, journalQuery]);
+  const historicalForecasts = useMemo(() => Object.values(forecasts).sort((a, b) => b.date.localeCompare(a.date)), [forecasts]);
+  const forecastCounts = useMemo(() => forecastStats(forecasts), [forecasts]);
+
   const exportJournal = async (format: "json" | "md") => {
     try {
       if (vaultStatus === "unlocked" && !window.confirm(t.vaultPlainWarning)) return;
@@ -814,6 +817,10 @@ export default function App() {
           onClick={() => setView(view === "journal" ? "oracle" : "journal")}>
           {view === "journal" ? t.backToOracle : t.journal}
         </button>
+        <button type="button" className="muted-button" aria-pressed={view === "history"}
+          onClick={() => setView(view === "history" ? "oracle" : "history")}>
+          {view === "history" ? t.backToOracle : (lang === "fi" ? "Ennustehistoria" : "Forecast history")}
+        </button>
         <button type="button" className="muted-button" onClick={() => setDay(localToday())}>{t.backToToday}</button>
         {birth && <button className="muted-button" onClick={forget}>{t.forget}</button>}
       </section>
@@ -932,6 +939,44 @@ export default function App() {
           </div>}
         </section>
       </>}
+      {(vaultStatus === "unprotected" || vaultStatus === "unlocked") && view === "history" && <section className="panel journal-panel">
+        <div className="eyebrow">✦ {lang === "fi" ? "ENNUSTEHISTORIA" : "FORECAST HISTORY"}</div>
+        <h2>{lang === "fi" ? "Tallennetut ennusteet" : "Saved forecasts"}</h2>
+        <p className="subtle">{lang === "fi"
+          ? "Vain päivät, jolloin ennuste todella avattiin. Puuttuvia päiviä ei täytetä eikä arvioimattomia tulkita epäonnistumisiksi."
+          : "Only days when a forecast was actually viewed. Missing days are not backfilled; unrated forecasts are not failures."}</p>
+        <p className="subtle">{lang === "fi" ? "Ennusteita" : "Forecasts"}: {historicalForecasts.length}
+          {" · "}{lang === "fi" ? "Arvioitu" : "Rated"}: {forecastCounts.rated}
+          {" · "}{lang === "fi" ? "Arvioimatta" : "Unrated"}: {historicalForecasts.length - forecastCounts.rated}</p>
+        {historicalForecasts.length === 0 ? <p className="subtle">{lang === "fi"
+          ? "Ei vielä tallennettuja ennusteita. Historiaan kertyy vain todella katsottuja päiviä."
+          : "No saved forecasts yet. History grows only on days you actually view a forecast."}</p> :
+          <div className="journal-list">
+            {historicalForecasts.map((forecast) => {
+              const rating = forecast.assessment?.rating;
+              const ratingLabel = rating ? ({
+                yes: lang === "fi" ? "Osui" : "Felt accurate",
+                partial: lang === "fi" ? "Osittain" : "Partly",
+                no: lang === "fi" ? "Ei osunut" : "Did not fit",
+                unsure: lang === "fi" ? "En osaa sanoa" : "Unsure"
+              }[rating]) : (lang === "fi" ? "Ei arviota" : "Not rated");
+              return <article className="journal-entry" key={forecast.date}>
+                <div className="journal-entry-header"><strong>{forecast.date}</strong>
+                  <span className="subtle">{ratingLabel}</span>
+                </div>
+                <p style={{ overflowWrap: "anywhere" }}>{forecast.message}</p>
+                <p className="subtle">{lang === "fi" ? "Näytetty" : "Viewed"}: {new Date(forecast.createdAt).toLocaleString(lang)}
+                  {" · "}{forecast.locale.toUpperCase()} · {forecast.persona === "mystic" ? (lang === "fi" ? "Mystikko" : "Mystic") : (lang === "fi" ? "Skeptikko" : "Skeptic")}
+                  {new Date(forecast.createdAt).getHours() >= 18 && <> · {lang === "fi" ? "Ensi kertaa illalla" : "First viewed in evening"}</>}
+                </p>
+                {forecast.assessment?.note && <p style={{ overflowWrap: "anywhere" }}>{forecast.assessment.note}</p>}
+              </article>;
+            })}
+          </div>}
+        <p className="subtle">{lang === "fi"
+          ? "Arviot kuvaavat omaa kokemusta, eivät ennusteiden tieteellistä osuvuutta."
+          : "Ratings describe personal impressions, not scientific predictive accuracy."}</p>
+      </section>}
       {birth && !error && view === "journal" && <section className="panel journal-panel">
         <div className="eyebrow">✦ {t.journal}</div>
         <h2>{t.journalTitle}</h2>
