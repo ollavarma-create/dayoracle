@@ -649,20 +649,29 @@ export default function App() {
   const [assessmentNote, setAssessmentNote] = useState("");
   const [assessmentRating, setAssessmentRating] = useState<ForecastRating>("unsure");
   const [assessmentError, setAssessmentError] = useState("");
+  const [assessmentFeedback, setAssessmentFeedback] = useState<"idle" | "saving" | "saved">("idle");
   useEffect(() => {
     setAssessmentRating(savedForecast?.assessment?.rating ?? "unsure");
     setAssessmentNote(savedForecast?.assessment?.note ?? "");
     setAssessmentError("");
+    setAssessmentFeedback("idle");
   }, [day, savedForecast?.assessment?.updatedAt]);
-  const saveAssessment = () => {
-    if (!savedForecast) return;
+  const saveAssessment = async () => {
+    if (!savedForecast || assessmentFeedback === "saving") return;
+    setAssessmentFeedback("saving");
+    setAssessmentError("");
     try {
       const next = assessForecast(forecastsRef.current, day, assessmentRating, assessmentNote, new Date(), assessmentTime);
       persist({ birthDate: birth, intentions, reflections, forecasts: next });
       forecastsRef.current = next;
       setForecasts(next);
-      setAssessmentError("");
-    } catch (cause) { setAssessmentError(String(cause)); }
+      // A vault write must reach disk before showing a success message.
+      if (statusRef.current === "unlocked") await flushVault();
+      setAssessmentFeedback("saved");
+    } catch (cause) {
+      setAssessmentFeedback("idle");
+      setAssessmentError(String(cause));
+    }
   };
 
   const quote = useMemo(() => quotes[lang][Array.from(day).reduce((sum, char) => sum + char.charCodeAt(0), 0) % quotes[lang].length], [lang, day]);
@@ -819,10 +828,10 @@ export default function App() {
           {savedForecast && mayAssess(day, clockNow, assessmentTime) && <div className="panel" style={{ marginTop: "1rem" }}>
             <h3>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
             <p className="subtle">{lang === "fi" ? "Oma tulkintasi, ei ennusteen tieteellinen osuvuus." : "Your subjective impression, not scientific predictive accuracy."}</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "1rem", alignItems: "start", marginTop: "1rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "0.75rem", alignItems: "start", marginTop: "0.75rem" }}>
               <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
                 {lang === "fi" ? "Arvio" : "Rating"}
-                <select style={{ width: "100%", minWidth: 0 }} value={assessmentRating} onChange={e => setAssessmentRating(e.target.value as ForecastRating)}>
+                <select style={{ width: "100%", minWidth: 0, height: "42px", boxSizing: "border-box" }} value={assessmentRating} onChange={e => { setAssessmentRating(e.target.value as ForecastRating); setAssessmentFeedback("idle"); }}>
                   <option value="unsure">{lang === "fi" ? "En osaa sanoa" : "Unsure"}</option>
                   <option value="yes">{lang === "fi" ? "Osui" : "Felt accurate"}</option>
                   <option value="partial">{lang === "fi" ? "Osittain" : "Partly"}</option>
@@ -831,11 +840,12 @@ export default function App() {
               </label>
               <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
                 {lang === "fi" ? "Huomio (vapaaehtoinen)" : "Note (optional)"}
-                <textarea style={{ width: "100%", minWidth: 0, boxSizing: "border-box", minHeight: "5rem", resize: "vertical" }} maxLength={500} value={assessmentNote} onChange={e => setAssessmentNote(e.target.value)} />
+                <textarea style={{ width: "100%", minWidth: 0, boxSizing: "border-box", height: "54px", minHeight: "54px", resize: "vertical" }} maxLength={500} value={assessmentNote} onChange={e => { setAssessmentNote(e.target.value); setAssessmentFeedback("idle"); }} />
               </label>
             </div>
-            <div style={{ marginTop: "1rem" }}>
-              <button type="button" onClick={saveAssessment}>{lang === "fi" ? "Tallenna arvio" : "Save assessment"}</button>
+            <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+              <button type="button" disabled={assessmentFeedback === "saving"} onClick={() => { void saveAssessment(); }}>{assessmentFeedback === "saving" ? (lang === "fi" ? "Tallennetaan…" : "Saving…") : (lang === "fi" ? "Tallenna arvio" : "Save assessment")}</button>
+              {assessmentFeedback === "saved" && <span role="status" className="subtle">{lang === "fi" ? "✓ Arvio tallennettu" : "✓ Assessment saved"}</span>}
             </div>
             {assessmentError && <p role="alert">{assessmentError}</p>}
           </div>}
