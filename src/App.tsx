@@ -229,20 +229,17 @@ export default function App() {
   const pending = useRef<Promise<void>>(Promise.resolve());
   const staged = useRef<VaultState | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveFailure = useRef(false);
   const flushVault = async () => {
     if (saveTimer.current !== null) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     if (staged.current && secret.current && statusRef.current === "unlocked") {
       const snapshot = staged.current;
       staged.current = null;
       const password = secret.current;
-      pending.current = pending.current.then(() => writeVault(password, snapshot));
+      pending.current = pending.current.catch(() => { /* Previous failure was reported. Retry latest state. */ }).then(() => writeVault(password, snapshot));
     }
     try {
       await pending.current;
-      saveFailure.current = false;
     } catch {
-      saveFailure.current = true;
       setVaultError(text[lang].vaultError);
       throw new Error("Encrypted journal save failed");
     }
