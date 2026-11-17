@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -227,25 +228,56 @@ export default function App() {
   const secret = useRef<string | null>(null);
   const statusRef = useRef<VaultStatus>("checking");
   const pending = useRef<Promise<void>>(Promise.resolve());
+  const [saveState, setSaveState] = useState<"saved" | "pending" | "saving" | "error">("saved");
+  const closeInProgress = useRef(false);
   const staged = useRef<VaultState | null>(null);
+  const snapshotForRetry = useRef<VaultState | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushVault = async () => {
     if (saveTimer.current !== null) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     if (staged.current && secret.current && statusRef.current === "unlocked") {
       const snapshot = staged.current;
+      snapshotForRetry.current = snapshot;
       staged.current = null;
+      setSaveState("saving");
       const password = secret.current;
       pending.current = pending.current.catch(() => { /* Previous failure was reported. Retry latest state. */ }).then(() => writeVault(password, snapshot));
     }
     try {
       await pending.current;
+      snapshotForRetry.current = null;
+      if (!staged.current) setSaveState("saved");
     } catch {
+      staged.current ??= snapshotForRetry.current;
+      setSaveState("error");
       setVaultError(text[lang].vaultError);
       throw new Error("Encrypted journal save failed");
     }
   };
   useEffect(() => () => {
     if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+  }, []);
+  // Intercept ordinary window closure until encrypted writes have reached disk.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow().onCloseRequested(async event => {
+      event.preventDefault();
+      if (closeInProgress.current) return;
+      closeInProgress.current = true;
+      try {
+        if (statusRef.current === "unlocked") await flushVault();
+        if (!disposed) await getCurrentWindow().destroy();
+      } catch {
+        closeInProgress.current = false;
+        setVaultError(text[lang].vaultError);
+        window.alert(lang === "fi"
+          ? "Päiväkirjan tallennus epäonnistui. Ikkunaa ei suljettu, jotta tiedot eivät katoaisi."
+          : "Journal save failed. The window was kept open to protect your changes.");
+      }
+    }).then(fn => { if (disposed) fn(); else unlisten = fn; })
+      .catch(() => setVaultError("Window close protection could not be installed."));
+    return () => { disposed = true; unlisten?.(); };
   }, []);
   const lastBirth = useRef<string | null>(null);
   const setStatus = (status: VaultStatus) => { statusRef.current = status; setVaultStatus(status); };
@@ -266,6 +298,7 @@ export default function App() {
   const persist = (state: VaultState) => {
     if (statusRef.current === "unlocked" && secret.current) {
       staged.current = state;
+      setSaveState("pending");
       if (saveTimer.current !== null) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
         void flushVault().catch(() => { /* Keep the journal unlocked on write failure. */ });
