@@ -821,12 +821,20 @@ export default function App() {
         <section className="hero panel">
           <div className="eyebrow">✦ {t.perspective}</div>
           <h2>{savedForecast?.message ?? oracleMessage(result.values, persona, lang, day, birth)}</h2>
-          <p className="subtle">{t.days}: {result.daysLived.toLocaleString(lang)}</p>
-          {savedForecast && <p className="subtle">{lang === "fi" ? "Tallennettu ennuste" : "Saved forecast"} · {new Date(savedForecast.createdAt).toLocaleString(lang)}
-            {new Date(savedForecast.createdAt).getHours() >= 18 && <span> · {lang === "fi" ? "Näytetty ensi kertaa illalla" : "First viewed in the evening"}</span>}
-          </p>}
+          <p className="subtle" style={{ display: "flex", gap: "0.5rem 1.25rem", flexWrap: "wrap" }}>
+            <span>{lang === "fi" ? "Ikä" : "Age"}: {Math.max(0, Number(day.slice(0, 4)) - Number(birth.slice(0, 4)) - (day.slice(5) < birth.slice(5) ? 1 : 0))} {lang === "fi" ? "vuotta" : "years"}</span>
+            {savedForecast && <span>{lang === "fi" ? "Tallennettu ennuste" : "Saved forecast"} · {new Date(savedForecast.createdAt).toLocaleString(lang)}
+              {new Date(savedForecast.createdAt).getHours() >= 18 && <span> · {lang === "fi" ? "Näytetty ensi kertaa illalla" : "First viewed in the evening"}</span>}
+            </span>}
+          </p>
           {savedForecast && mayAssess(day, clockNow, assessmentTime) && <div className="panel" style={{ marginTop: "1rem" }}>
-            <h3>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem 1rem", flexWrap: "wrap" }}>
+              <h3 style={{ margin: 0 }}>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button type="button" disabled={assessmentFeedback === "saving"} onClick={() => { void saveAssessment(); }}>{assessmentFeedback === "saving" ? (lang === "fi" ? "Tallennetaan…" : "Saving…") : (lang === "fi" ? "Tallenna arvio" : "Save assessment")}</button>
+                {assessmentFeedback === "saved" && <span role="status" className="subtle">{lang === "fi" ? "✓ Arvio tallennettu" : "✓ Assessment saved"}</span>}
+              </div>
+            </div>
             <p className="subtle">{lang === "fi" ? "Oma tulkintasi, ei ennusteen tieteellinen osuvuus." : "Your subjective impression, not scientific predictive accuracy."}</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "0.75rem", alignItems: "start", marginTop: "0.75rem" }}>
               <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
@@ -843,10 +851,7 @@ export default function App() {
                 <textarea style={{ width: "100%", minWidth: 0, boxSizing: "border-box", height: "54px", minHeight: "54px", resize: "vertical" }} maxLength={500} value={assessmentNote} onChange={e => { setAssessmentNote(e.target.value); setAssessmentFeedback("idle"); }} />
               </label>
             </div>
-            <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-              <button type="button" disabled={assessmentFeedback === "saving"} onClick={() => { void saveAssessment(); }}>{assessmentFeedback === "saving" ? (lang === "fi" ? "Tallennetaan…" : "Saving…") : (lang === "fi" ? "Tallenna arvio" : "Save assessment")}</button>
-              {assessmentFeedback === "saved" && <span role="status" className="subtle">{lang === "fi" ? "✓ Arvio tallennettu" : "✓ Assessment saved"}</span>}
-            </div>
+
             {assessmentError && <p role="alert">{assessmentError}</p>}
           </div>}
         </section>
