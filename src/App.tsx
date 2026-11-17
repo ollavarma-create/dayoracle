@@ -289,7 +289,18 @@ export default function App() {
   const setStatus = (status: VaultStatus) => { statusRef.current = status; setVaultStatus(status); };
 
   const [birth, setBirth] = useState(() => localStorage.getItem("dayoracle-birth") ?? "");
-  const validBirthInput = (value: string) => value === "" || (/^\d{4}-\d{2}-\d{2}$/.test(value) && value >= "1800-01-01" && value <= localToday());
+  const validBirthInput = (value: string) => value === "" || (/^\d{4}-\d{2}-\d{2}$/.test(value) && value >= "1800-01-01" && value <= localToday() && !Number.isNaN(new Date(value + "T12:00:00").getTime()) && new Date(value + "T12:00:00").toISOString().slice(0, 10) === value);
+  const [birthDraft, setBirthDraft] = useState(birth);
+  const [birthInputError, setBirthInputError] = useState("");
+  useEffect(() => { setBirthDraft(birth); setBirthInputError(""); }, [birth]);
+  const commitBirthDraft = () => {
+    if (!validBirthInput(birthDraft) || (birthDraft === "" && birth !== "")) {
+      setBirthInputError(lang === "fi" ? "Virheellinen syntymäpäivä. Valitse päivämäärä väliltä 1.1.1800–tänään." : "Invalid birth date. Choose a date from 1800-01-01 through today.");
+      return;
+    }
+    setBirthInputError("");
+    if (birthDraft !== birth) setBirth(birthDraft);
+  };
   const [day, setDay] = useState(localToday);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
@@ -657,7 +668,7 @@ export default function App() {
         {backupMessage && <p role="status">{backupMessage}</p>}
       </section>}
       <section className="inputs" aria-label="Oracle settings">
-        <label>{t.birth}<input type="date" value={birth} min="1800-01-01" max={day} onChange={(event) => { const value = event.target.value; if (validBirthInput(value)) setBirth(value); }} /></label>
+        <label>{t.birth}<input type="date" value={birthDraft} min="1800-01-01" max={localToday()} aria-invalid={Boolean(birthInputError)} onChange={(event) => { setBirthDraft(event.target.value); setBirthInputError(""); }} onBlur={commitBirthDraft} />{birthInputError && <span role="alert" style={{ color: "#f5a7a7", fontSize: "0.85rem" }}>{birthInputError}</span>}</label>
         <label>{t.date}<input type="date" value={day} min={birth || undefined} onChange={(event) => setDay(event.target.value)} /></label>
         <label>{lang === "fi" ? "Oraakkeli" : "Oracle persona"}
           <select value={persona} onChange={(event) => setPersona(event.target.value as Persona)}>
