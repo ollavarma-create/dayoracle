@@ -388,7 +388,7 @@ export default function App() {
       setDay(localToday());
       setBackupPassword(""); setBackupImportOpen(false);
       setBackupMessage(t.vaultImportOk);
-    } catch { setVaultError(t.vaultImportError); }
+    } catch (error) { console.error("Encrypted backup restore failed:", error); setVaultError(t.vaultImportError); }
     finally { setVaultBusy(false); }
   };
   const reflectionId = reflectionKey(birth, day);
@@ -533,7 +533,7 @@ export default function App() {
       {settingsOpen && <section id="dayoracle-settings" className="panel journal-panel" aria-label={t.settings}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
           <h2 style={{ margin: 0 }}>{t.settings}</h2>
-          <button type="button" className="muted-button" onClick={() => { setSettingsOpen(false); setPasswordSettingsOpen(false); }}>{t.settingsClose}</button>
+          <button type="button" className="muted-button" onClick={() => { setSettingsOpen(false); setPasswordSettingsOpen(false); setBackupImportOpen(false); setPasswordChangeMessage(""); setVaultError(""); }}>{t.settingsClose}</button>
         </div>
         {vaultStatus === "unprotected" ? <>
           <h3>{t.protect}</h3><p>{t.vaultWarning}</p>
@@ -546,10 +546,10 @@ export default function App() {
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1rem" }}>
             <button type="button" disabled={vaultBusy} onClick={() => { void lockVault(); }}>{t.vaultLock}</button>
             <button type="button" className="muted-button settings-action" aria-expanded={passwordSettingsOpen}
-              onClick={() => { setPasswordSettingsOpen(!passwordSettingsOpen); setVaultNew(""); setVaultNewConfirm(""); setPasswordChangeMessage(""); setVaultError(""); }}>{t.passwordSettings}</button>
-            <button type="button" disabled={vaultBusy} onClick={() => { void exportVault(); }}>{t.vaultEncryptedExport}</button>
+              onClick={() => { setPasswordSettingsOpen(!passwordSettingsOpen); setBackupImportOpen(false); setBackupPassword(""); setVaultNew(""); setVaultNewConfirm(""); setPasswordChangeMessage(""); setVaultError(""); setBackupMessage(""); }}>{t.passwordSettings}</button>
+            <button type="button" disabled={vaultBusy} onClick={() => { setPasswordSettingsOpen(false); setBackupImportOpen(false); setVaultNew(""); setVaultNewConfirm(""); setBackupPassword(""); setPasswordChangeMessage(""); setVaultError(""); setBackupMessage(""); void exportVault(); }}>{t.vaultEncryptedExport}</button>
             <button type="button" className="muted-button settings-action" disabled={vaultBusy} aria-expanded={backupImportOpen}
-              onClick={() => { setBackupImportOpen(!backupImportOpen); setBackupPassword(""); setVaultError(""); }}>{t.vaultEncryptedImport}</button>
+              onClick={() => { setBackupImportOpen(!backupImportOpen); setPasswordSettingsOpen(false); setVaultNew(""); setVaultNewConfirm(""); setPasswordChangeMessage(""); setBackupPassword(""); setVaultError(""); setBackupMessage(""); }}>{t.vaultEncryptedImport}</button>
           </div>
           {backupImportOpen && <div style={{ display: "grid", gap: "0.75rem", maxWidth: "360px", marginTop: "1rem" }}>
             <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultBackupPassword}<input type="password" autoComplete="off" value={backupPassword} onChange={e => setBackupPassword(e.target.value)} /></label>
