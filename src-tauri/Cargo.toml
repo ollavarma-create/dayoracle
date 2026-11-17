@@ -1,6 +1,6 @@
 [package]
 name = "dayoracle"
-version = "0.1.0-alpha.1"
+version = "0.2.0-alpha.1"
 description = "A playful philosophical daily oracle"
 authors = ["DayOracle contributors"]
 edition = "2021"
