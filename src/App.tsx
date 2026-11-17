@@ -819,18 +819,24 @@ export default function App() {
           {savedForecast && mayAssess(day, clockNow, assessmentTime) && <div className="panel" style={{ marginTop: "1rem" }}>
             <h3>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
             <p className="subtle">{lang === "fi" ? "Oma tulkintasi, ei ennusteen tieteellinen osuvuus." : "Your subjective impression, not scientific predictive accuracy."}</p>
-            <label>{lang === "fi" ? "Arvio" : "Rating"}
-              <select value={assessmentRating} onChange={e => setAssessmentRating(e.target.value as ForecastRating)}>
-                <option value="unsure">{lang === "fi" ? "En osaa sanoa" : "Unsure"}</option>
-                <option value="yes">{lang === "fi" ? "Osui" : "Felt accurate"}</option>
-                <option value="partial">{lang === "fi" ? "Osittain" : "Partly"}</option>
-                <option value="no">{lang === "fi" ? "Ei osunut" : "Did not fit"}</option>
-              </select>
-            </label>
-            <label>{lang === "fi" ? "Huomio (vapaaehtoinen)" : "Note (optional)"}
-              <textarea maxLength={500} value={assessmentNote} onChange={e => setAssessmentNote(e.target.value)} />
-            </label>
-            <button type="button" onClick={saveAssessment}>{lang === "fi" ? "Tallenna arvio" : "Save assessment"}</button>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "1rem", alignItems: "start", marginTop: "1rem" }}>
+              <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
+                {lang === "fi" ? "Arvio" : "Rating"}
+                <select style={{ width: "100%", minWidth: 0 }} value={assessmentRating} onChange={e => setAssessmentRating(e.target.value as ForecastRating)}>
+                  <option value="unsure">{lang === "fi" ? "En osaa sanoa" : "Unsure"}</option>
+                  <option value="yes">{lang === "fi" ? "Osui" : "Felt accurate"}</option>
+                  <option value="partial">{lang === "fi" ? "Osittain" : "Partly"}</option>
+                  <option value="no">{lang === "fi" ? "Ei osunut" : "Did not fit"}</option>
+                </select>
+              </label>
+              <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
+                {lang === "fi" ? "Huomio (vapaaehtoinen)" : "Note (optional)"}
+                <textarea style={{ width: "100%", minWidth: 0, boxSizing: "border-box", minHeight: "5rem", resize: "vertical" }} maxLength={500} value={assessmentNote} onChange={e => setAssessmentNote(e.target.value)} />
+              </label>
+            </div>
+            <div style={{ marginTop: "1rem" }}>
+              <button type="button" onClick={saveAssessment}>{lang === "fi" ? "Tallenna arvio" : "Save assessment"}</button>
+            </div>
             {assessmentError && <p role="alert">{assessmentError}</p>}
           </div>}
         </section>
