@@ -1,7 +1,7 @@
 import type { ForecastHistory } from "./forecast-history.ts";
 import { parseReflections, type ReflectionStore } from "./evening-reflection.ts";
 import { journalEntries, type JournalEntry } from "./journal.ts";
-export type JournalBackup = { format: "dayoracle-journal"; version: 2; birthDate: string; intentions: Record<string,string>; reflections: ReflectionStore; forecasts: ForecastHistory };
+export type JournalBackup = { format: "dayoracle-journal"; version: 1; birthDate: string; intentions: Record<string,string>; reflections: ReflectionStore; forecasts: ForecastHistory };
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const INTENTIONS = new Set(["curious","kind","pause"]);
 function validDate(s:string):boolean {
@@ -15,7 +15,7 @@ export function makeBackup(birthDate:string, intentions:Record<string,string>, r
   const safeIntentions:Record<string,string>={};
   for(const [date,value] of Object.entries(intentions)) if(validDate(date)&&INTENTIONS.has(value)) safeIntentions[date]=value;
   const safeReflections=parseReflections(JSON.stringify(reflections));
-  return {format:"dayoracle-journal",version:2,birthDate,intentions:safeIntentions,
+  return {format:"dayoracle-journal",version:1,birthDate,intentions:safeIntentions,
     reflections:safeReflections, forecasts: validateForecasts(forecasts)};
 }
 export function parseBackup(raw:string):JournalBackup {
@@ -24,7 +24,7 @@ export function parseBackup(raw:string):JournalBackup {
   try {parsed=JSON.parse(raw);} catch {throw new Error("Invalid JSON");}
   if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)) throw new Error("Invalid backup");
   const data=parsed as Record<string,unknown>;
-  if(data.format!=="dayoracle-journal"||(data.version!==1&&data.version!==2)||typeof data.birthDate!=="string"||(data.birthDate!==""&&!validDate(data.birthDate))) throw new Error("Invalid backup header");
+  if(data.format!=="dayoracle-journal"||data.version!==1||typeof data.birthDate!=="string"||(data.birthDate!==""&&!validDate(data.birthDate))) throw new Error("Invalid backup header");
   if(!data.intentions||typeof data.intentions!=="object"||Array.isArray(data.intentions)||!data.reflections||typeof data.reflections!=="object"||Array.isArray(data.reflections)) throw new Error("Invalid backup entries");
   for(const [date,value] of Object.entries(data.intentions)) if(!validDate(date)||typeof value!=="string"||!INTENTIONS.has(value)) throw new Error("Invalid intention");
   for(const [key,value] of Object.entries(data.reflections)) {
@@ -35,7 +35,7 @@ export function parseBackup(raw:string):JournalBackup {
   }
   const reflections=parseReflections(JSON.stringify(data.reflections));
   if(Object.keys(reflections).length!==Object.keys(data.reflections).length) throw new Error("Invalid reflection entries");
-  return makeBackup(data.birthDate,data.intentions as Record<string,string>,reflections, data.version===2 ? validateForecasts(data.forecasts) : {});
+  return makeBackup(data.birthDate,data.intentions as Record<string,string>,reflections, data.forecasts === undefined ? {} : validateForecasts(data.forecasts));
 }
 const RATINGS = new Set(["yes", "partial", "no", "unsure"]);
 function validateForecasts(input: unknown): ForecastHistory {
