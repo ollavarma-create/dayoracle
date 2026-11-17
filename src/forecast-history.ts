@@ -30,19 +30,29 @@ export function addForecast(history: ForecastHistory, forecast: ForecastSnapshot
   return { ...history, [forecast.date]: { ...forecast } };
 }
 
-export function mayAssess(forecastDate: string, now: Date): boolean {
+export type AssessmentTime = "any" | `${number}:${number}`;
+export function validAssessmentTime(value: string): boolean {
+  if (value === "any") return true;
+  if (!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(value)) return false;
+  return true;
+}
+
+export function mayAssess(forecastDate: string, now: Date, time: AssessmentTime = "18:00"): boolean {
+  if (!validAssessmentTime(time)) return false;
   if (!validDate(forecastDate)) return false;
-  // Local evening at 18:00; older dates remain assessable.
+  // Local chosen time; earlier dates remain assessable.
   const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"),
     String(now.getDate()).padStart(2, "0")].join("-");
-  return forecastDate < today || (forecastDate === today && now.getHours() >= 18);
+  return forecastDate < today || (forecastDate === today && (time === "any" ||
+    now.getHours() * 60 + now.getMinutes() >= Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))));
 }
 
 export function assessForecast(
-  history: ForecastHistory, date: string, rating: ForecastRating, note: string, now: Date
+  history: ForecastHistory, date: string, rating: ForecastRating, note: string, now: Date,
+  time: AssessmentTime = "18:00"
 ): ForecastHistory {
   const forecast = history[date];
-  if (!forecast || !mayAssess(date, now) ||
+  if (!forecast || !mayAssess(date, now, time) ||
       !["yes", "partial", "no", "unsure"].includes(rating) || note.length > 500)
     throw new Error("Assessment not allowed");
   const timestamp = now.toISOString();
