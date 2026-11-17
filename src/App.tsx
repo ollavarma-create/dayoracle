@@ -223,6 +223,7 @@ export default function App() {
   const secret = useRef<string | null>(null);
   const statusRef = useRef<VaultStatus>("checking");
   const pending = useRef<Promise<void>>(Promise.resolve());
+  const lastBirth = useRef<string | null>(null);
   const setStatus = (status: VaultStatus) => { statusRef.current = status; setVaultStatus(status); };
 
   const [birth, setBirth] = useState(() => localStorage.getItem("dayoracle-birth") ?? "");
@@ -282,14 +283,14 @@ export default function App() {
       const data = await unlockVault(vaultPassword);
       secret.current = vaultPassword;
       setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections);
-      setVaultPassword(""); setStatus("unlocked");
+      setVaultPassword(""); lastBirth.current = data.birthDate; setStatus("unlocked");
     } catch { setVaultError(t.vaultError); } finally { setVaultBusy(false); }
   };
   const lockVault = async () => {
     if (vaultBusy || vaultStatus !== "unlocked") return;
     setVaultBusy(true); await pending.current;
     secret.current = null; setBirth(""); setIntentions({}); setReflections({});
-    setVaultPassword(""); setVaultNew(""); setJournalQuery(""); setStatus("locked");
+    setVaultPassword(""); setVaultNew(""); setJournalQuery(""); lastBirth.current = null; setStatus("locked");
     setVaultBusy(false);
   };
   const updatePassword = async () => {
@@ -377,6 +378,10 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
+    if (statusRef.current === "unlocked" && birth && lastBirth.current !== null && lastBirth.current !== birth) {
+      persist({ birthDate: birth, intentions, reflections });
+    }
+    lastBirth.current = birth;
     if (statusRef.current === "unprotected") {
       if (birth) localStorage.setItem("dayoracle-birth", birth);
       else localStorage.removeItem("dayoracle-birth");
