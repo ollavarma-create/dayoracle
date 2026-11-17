@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import { dailyQuestion } from "./reflection";
+import { clearBirthReflections, EMPTY_REFLECTION, parseReflections, reflectionKey, REFLECTION_STORAGE_KEY, updateReflection, type DailyReflection } from "./evening-reflection";
 
 
 type Cycles = { physical: number; emotional: number; intellectual: number };
@@ -20,6 +21,15 @@ const text = {
     question: "A question worth asking",
     intentionSaved: "Saved on this device for this date",
     backToToday: "Today",
+    evening: "Looking back",
+    eveningPrompt: "What did you notice about your intention?",
+    eveningDone: "I followed it",
+    eveningPartly: "A little",
+    eveningNotToday: "Not today",
+    eveningNote: "One observation (optional)",
+    eveningPlaceholder: "A small detail worth remembering…",
+    eveningSaved: "Saved privately on this device",
+    eveningClear: "Clear this reflection",
     timeline: "Your cosmic curves",
     mystic: "Mystic", skeptic: "Skeptic",
     noBirth: "Enter your date of birth to begin.",
@@ -42,6 +52,15 @@ const text = {
     question: "Kysymys pohdittavaksi",
     intentionSaved: "Tallennettu tälle päivälle tällä laitteella",
     backToToday: "Tänään",
+    evening: "Päivän jälkiviisaus",
+    eveningPrompt: "Mitä huomasit päivän aikomuksestasi?",
+    eveningDone: "Toteutin sen",
+    eveningPartly: "Vähän",
+    eveningNotToday: "En tänään",
+    eveningNote: "Yksi havainto (vapaaehtoinen)",
+    eveningPlaceholder: "Pieni asia, jonka haluat muistaa…",
+    eveningSaved: "Tallennettu yksityisesti tälle laitteelle",
+    eveningClear: "Tyhjennä tämä pohdinta",
     timeline: "Kosmiset käyräsi",
     mystic: "Mystikko", skeptic: "Skeptikko",
     noBirth: "Aloita antamalla syntymäpäiväsi.",
@@ -144,6 +163,20 @@ export default function App() {
     } catch { /* Ignore malformed local data. */ }
     return {};
   });
+  const [reflections, setReflections] = useState(() => parseReflections(localStorage.getItem(REFLECTION_STORAGE_KEY)));
+  const reflectionId = reflectionKey(birth, day);
+  const reflection = reflections[reflectionId] ?? EMPTY_REFLECTION;
+  const saveReflection = (change: Partial<DailyReflection>) => {
+    const next = updateReflection(reflections, reflectionId, change);
+    setReflections(next);
+    localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(next));
+  };
+  const clearReflection = () => {
+    const next = { ...reflections };
+    delete next[reflectionId];
+    setReflections(next);
+    localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(next));
+  };
   const t = text[lang];
   const intention = intentions[day] ?? "";
 
@@ -171,6 +204,9 @@ export default function App() {
 
   const quote = useMemo(() => quotes[lang][Array.from(day).reduce((sum, char) => sum + char.charCodeAt(0), 0) % quotes[lang].length], [lang, day]);
   const forget = () => {
+    const remaining = clearBirthReflections(reflections, birth);
+    setReflections(remaining);
+    localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(remaining));
     setBirth("");
     setResult(null);
     setIntentions({});
@@ -229,6 +265,30 @@ export default function App() {
             </div>
             {intention && <p className="intention-saved" role="status">✓ {t.intentionSaved}</p>}
           </div>
+        </section>
+        <section className="panel evening-panel" aria-label={t.evening}>
+          <div className="eyebrow">☾ {t.evening}</div>
+          <p className="evening-prompt">{t.eveningPrompt}</p>
+          <div className="evening-options">
+            {([
+              ["done", t.eveningDone],
+              ["partly", t.eveningPartly],
+              ["not-today", t.eveningNotToday],
+            ] as const).map(([value, label]) => (
+              <button type="button" key={value} className={reflection.status === value ? "intent active" : "intent"}
+                aria-pressed={reflection.status === value}
+                onClick={() => saveReflection({ status: value })}>{label}</button>
+            ))}
+          </div>
+          <label className="evening-note">{t.eveningNote}
+            <textarea rows={2} maxLength={500} value={reflection.note}
+              placeholder={t.eveningPlaceholder}
+              onChange={(event) => saveReflection({ note: event.target.value })} />
+          </label>
+          {(reflection.status || reflection.note) && <div className="evening-actions">
+            <span role="status">✓ {t.eveningSaved}</span>
+            <button type="button" className="evening-clear" onClick={clearReflection}>{t.eveningClear}</button>
+          </div>}
         </section>
         <section className="score-grid">
           {(["physical","emotional","intellectual"] as const).map((name) =>
