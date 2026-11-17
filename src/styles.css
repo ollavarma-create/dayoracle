@@ -36,3 +36,14 @@ select option{background-color:#1b2b42;color:#f4ecdf}
 .score{padding:11px 14px;gap:5px}
 .score strong{font-size:23px}
 @media(max-width:720px){.bottom-grid{grid-template-columns:1fr}.hero h2{font-size:21px}}
+
+/* PR #5: optional, private evening reflection */
+.evening-panel{margin:10px 0;padding:15px 18px}
+.evening-prompt{margin:8px 0 10px;color:#e7edf5;font-size:14px}
+.evening-options{display:flex;flex-wrap:wrap;gap:8px}
+.evening-options .intent{flex:1;min-width:120px;text-align:center}
+.evening-note{display:flex;flex-direction:column;gap:7px;margin-top:12px;font-size:12px;color:#b8c6d7}
+.evening-note textarea{width:100%;resize:vertical;min-height:55px;border:1px solid #35475e;border-radius:8px;padding:10px 12px;background:#1b2b42;color:#f4ecdf;font:inherit;font-size:14px}
+.evening-note textarea:focus-visible{outline:2px solid #e7bd7b;outline-offset:2px}
+.evening-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#a6d9c6}
+.evening-clear{border:0;background:transparent;color:#b9c7d7;text-decoration:underline;padding:5px}
