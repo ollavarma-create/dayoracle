@@ -246,7 +246,6 @@ export default function App() {
       const filename = format === "json" ? "dayoracle-journal.json" : "dayoracle-journal.md";
       const destination = await save({
         defaultPath: filename,
-        filters: [{ name: format === "json" ? "JSON" : "Markdown", extensions: [format] }],
       });
       if (!destination) return;
       const content = format === "json" ? JSON.stringify(backup, null, 2) :
