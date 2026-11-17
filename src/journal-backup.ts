@@ -1,0 +1,50 @@
+import { parseReflections, type ReflectionStore } from "./evening-reflection.ts";
+import { journalEntries, type JournalEntry } from "./journal.ts";
+export type JournalBackup = { format: "dayoracle-journal"; version: 1; birthDate: string; intentions: Record<string,string>; reflections: ReflectionStore };
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const INTENTIONS = new Set(["curious","kind","pause"]);
+function validDate(s:string):boolean {
+  if(!DATE.test(s)) return false;
+  const [y,m,d]=s.split("-").map(Number);
+  const parsed=new Date(Date.UTC(y,m-1,d));
+  return parsed.getUTCFullYear()===y && parsed.getUTCMonth()===m-1 && parsed.getUTCDate()===d;
+}
+export function makeBackup(birthDate:string, intentions:Record<string,string>, reflections:ReflectionStore):JournalBackup {
+  if(!validDate(birthDate)) throw new Error("Invalid birth date");
+  const safeIntentions:Record<string,string>={};
+  for(const [date,value] of Object.entries(intentions)) if(validDate(date)&&date>=birthDate&&INTENTIONS.has(value)) safeIntentions[date]=value;
+  const safeReflections=parseReflections(JSON.stringify(reflections));
+  return {format:"dayoracle-journal",version:1,birthDate,intentions:safeIntentions,
+    reflections:Object.fromEntries(Object.entries(safeReflections).filter(([key])=>key.startsWith(birthDate+"|")))};
+}
+export function parseBackup(raw:string):JournalBackup {
+  if(raw.length>2_000_000) throw new Error("Backup too large");
+  let parsed:unknown;
+  try {parsed=JSON.parse(raw);} catch {throw new Error("Invalid JSON");}
+  if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)) throw new Error("Invalid backup");
+  const data=parsed as Record<string,unknown>;
+  if(data.format!=="dayoracle-journal"||data.version!==1||typeof data.birthDate!=="string"||!validDate(data.birthDate)) throw new Error("Invalid backup header");
+  if(!data.intentions||typeof data.intentions!=="object"||Array.isArray(data.intentions)||!data.reflections||typeof data.reflections!=="object"||Array.isArray(data.reflections)) throw new Error("Invalid backup entries");
+  for(const [date,value] of Object.entries(data.intentions)) if(!validDate(date)||date<data.birthDate||typeof value!=="string"||!INTENTIONS.has(value)) throw new Error("Invalid intention");
+  for(const [key,value] of Object.entries(data.reflections)) {
+    const [birth,date,extra]=key.split("|");
+    if(birth!==data.birthDate||extra!==undefined||!validDate(date)||date<birth||!value||typeof value!=="object"||Array.isArray(value)) throw new Error("Invalid reflection");
+    const r=value as Record<string,unknown>;
+    if(!["","done","partly","not-today"].includes(String(r.status))||typeof r.note!=="string"||r.note.length>500) throw new Error("Invalid reflection content");
+  }
+  const reflections=parseReflections(JSON.stringify(data.reflections));
+  if(Object.keys(reflections).length!==Object.keys(data.reflections).length) throw new Error("Invalid reflection entries");
+  return makeBackup(data.birthDate,data.intentions as Record<string,string>,reflections);
+}
+export function filterJournal(entries:JournalEntry[],query:string):JournalEntry[] {
+  const needle=query.trim().toLocaleLowerCase();
+  return needle?entries.filter(e=>[e.date,e.intention,e.status,e.note].some(v=>v.toLocaleLowerCase().includes(needle))):entries;
+}
+export function backupMarkdown(backup:JournalBackup,labels:{title:string;intention:string;status:string;note:string}):string {
+  const escape=(s:string)=>s.replace(/\r/g,"").replace(/([\\*_\[\]#>])/g,"\\$1");
+  const rows=journalEntries(backup.birthDate,backup.intentions,backup.reflections);
+  return ["# "+labels.title,"",...rows.flatMap(r=>["## "+r.date,"",
+    ...(r.intention?["**"+labels.intention+":** "+escape(r.intention),""]:[]),
+    ...(r.status?["**"+labels.status+":** "+escape(r.status),""]:[]),
+    ...(r.note?["**"+labels.note+":** "+escape(r.note),""]:[])])].join("\n");
+}

@@ -114,3 +114,16 @@ footer { margin-top: 10px; padding-bottom: 4px; }
 .journal-note{color:#f1e9df}
 @media(min-width:901px){.inputs{grid-template-columns:repeat(3,minmax(125px,1fr)) repeat(4,auto)}.inputs .muted-button{font-size:12px;padding:9px 8px}}
 @media(max-width:900px){.inputs{display:flex;flex-wrap:wrap}.inputs label{flex:1 1 170px}.inputs .muted-button{flex:1 1 auto}}
+
+/* PR #9: local search, explicit unencrypted export and validated restore */
+.journal-tools{display:grid;gap:9px;margin:0 0 14px}
+.journal-tools>label{display:grid;gap:5px;font-size:12px;color:#b8c6d7}
+.journal-tools input[type="search"]{background:#1b2b42;color:#f4ecdf;border:1px solid #35475e;border-radius:8px;padding:10px 12px;width:100%}
+.journal-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.journal-buttons .muted-button{padding:8px 11px;font-size:12px}
+.journal-import{position:relative;cursor:pointer;display:inline-flex;align-items:center;border:1px solid #35475e;border-radius:8px;color:#dbe4ef;background:#1b2b42}
+.journal-import:focus-within{outline:2px solid #e4ad74;outline-offset:2px}
+.journal-import input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.journal-tools small{color:#b8c6d7}
+
+.journal-clear-all{justify-self:start;border-color:#87675f;color:#f2c6b7;font-size:12px;padding:8px 11px}

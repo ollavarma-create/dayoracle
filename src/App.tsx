@@ -1,7 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useState } from "react";
 import { dailyQuestion } from "./reflection";
 import { journalEntries } from "./journal";
+import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
 import { clearBirthReflections, EMPTY_REFLECTION, parseReflections, reflectionKey, REFLECTION_STORAGE_KEY, updateReflection, type DailyReflection } from "./evening-reflection";
 
 
@@ -36,6 +39,21 @@ const text = {
     backToOracle: "Back to oracle",
     journal: "Journal",
     journalTitle: "Your days, in your own words",
+    journalSearch: "Search journal",
+    journalClear: "Clear journal",
+    journalClearConfirm: "Delete all saved intentions and reflections on this device? Your birth date and settings will be kept. This cannot be undone.",
+    journalClearDone: "Journal cleared",
+    journalExportOk: "Export saved",
+    journalExportError: "Could not save export",
+    journalSearchPlaceholder: "Search dates, intentions or notes…",
+    journalExportJson: "Export JSON backup",
+    journalExportMd: "Export Markdown",
+    journalImport: "Restore JSON backup",
+    journalImportConfirm: "Replace the current journal and birth date with this backup? This cannot be undone.",
+    journalImportOk: "Backup restored",
+    journalImportError: "Backup could not be restored",
+    journalBackupNote: "Exports are unencrypted. Store them privately.",
+    journalNoMatches: "No matching entries.",
     journalEmpty: "No saved intentions or reflections yet.",
     journalOpen: "Open this day",
     journalIntention: "Intention",
@@ -78,6 +96,21 @@ const text = {
     backToOracle: "Takaisin oraakkeliin",
     journal: "Päiväkirja",
     journalTitle: "Omat päiväsi, omin sanoin",
+    journalSearch: "Hae päiväkirjasta",
+    journalClear: "Tyhjennä päiväkirja",
+    journalClearConfirm: "Poistetaanko kaikki tälle laitteelle tallennetut aikomukset ja pohdinnat? Syntymäpäivä ja asetukset säilyvät. Tätä ei voi perua.",
+    journalClearDone: "Päiväkirja tyhjennetty",
+    journalExportOk: "Vientitiedosto tallennettu",
+    journalExportError: "Vientitiedoston tallennus epäonnistui",
+    journalSearchPlaceholder: "Hae päivämääriä, aikomuksia tai havaintoja…",
+    journalExportJson: "Vie JSON-varmuuskopio",
+    journalExportMd: "Vie Markdown",
+    journalImport: "Palauta JSON-varmuuskopio",
+    journalImportConfirm: "Korvataanko nykyinen päiväkirja ja syntymäpäivä varmuuskopiolla? Tätä ei voi perua.",
+    journalImportOk: "Varmuuskopio palautettu",
+    journalImportError: "Varmuuskopion palautus epäonnistui",
+    journalBackupNote: "Vientitiedostot ovat salaamattomia. Säilytä ne yksityisesti.",
+    journalNoMatches: "Ei hakua vastaavia merkintöjä.",
     journalEmpty: "Ei vielä tallennettuja aikomuksia tai pohdintoja.",
     journalOpen: "Avaa tämä päivä",
     journalIntention: "Aikomus",
@@ -176,6 +209,8 @@ export default function App() {
   const [lang, setLang] = useState<Locale>(() => localStorage.getItem("dayoracle-lang") === "fi" ? "fi" : "en");
   const [persona, setPersona] = useState<Persona>("mystic");
   const [view, setView] = useState<"oracle" | "biorhythms" | "journal">("oracle");
+  const [journalQuery, setJournalQuery] = useState("");
+  const [backupMessage, setBackupMessage] = useState("");
   const [birth, setBirth] = useState(() => localStorage.getItem("dayoracle-birth") ?? "");
   const [day, setDay] = useState(localToday);
   const [result, setResult] = useState<Result | null>(null);
@@ -204,6 +239,48 @@ export default function App() {
   const t = text[lang];
   const intention = intentions[day] ?? "";
   const entries = useMemo(() => journalEntries(birth, intentions, reflections), [birth, intentions, reflections]);
+  const filteredEntries = useMemo(() => filterJournal(entries, journalQuery), [entries, journalQuery]);
+  const exportJournal = async (format: "json" | "md") => {
+    try {
+      const backup = makeBackup(birth, intentions, reflections);
+      const filename = format === "json" ? "dayoracle-journal.json" : "dayoracle-journal.md";
+      const destination = await save({
+        defaultPath: filename,
+      });
+      if (!destination) return;
+      const content = format === "json" ? JSON.stringify(backup, null, 2) :
+        backupMarkdown(backup, {
+          title: t.journalTitle, intention: t.journalIntention, status: t.evening, note: t.journalObservation,
+        });
+      await writeTextFile(destination, content);
+      setBackupMessage(t.journalExportOk);
+    } catch { setBackupMessage(t.journalExportError); }
+  };
+  const clearJournal = () => {
+    if (!window.confirm(t.journalClearConfirm)) return;
+    localStorage.removeItem("dayoracle-intentions");
+    localStorage.removeItem(REFLECTION_STORAGE_KEY);
+    setIntentions({});
+    setReflections({});
+    setJournalQuery("");
+    setBackupMessage(t.journalClearDone);
+  };
+  const importJournal = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 2_000_000) { setBackupMessage(t.journalImportError); return; }
+    try {
+      const backup = parseBackup(await file.text());
+      if (!window.confirm(t.journalImportConfirm)) return;
+      localStorage.setItem("dayoracle-intentions", JSON.stringify(backup.intentions));
+      localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(backup.reflections));
+      localStorage.setItem("dayoracle-birth", backup.birthDate);
+      setIntentions(backup.intentions);
+      setReflections(backup.reflections);
+      setBirth(backup.birthDate);
+      setDay(localToday());
+      setBackupMessage(t.journalImportOk);
+    } catch { setBackupMessage(t.journalImportError); }
+  };
 
   useEffect(() => {
     localStorage.setItem("dayoracle-lang", lang);
@@ -327,9 +404,29 @@ export default function App() {
       {birth && !error && view === "journal" && <section className="panel journal-panel">
         <div className="eyebrow">✦ {t.journal}</div>
         <h2>{t.journalTitle}</h2>
+        <div className="journal-tools">
+          <label>{t.journalSearch}
+            <input type="search" value={journalQuery} placeholder={t.journalSearchPlaceholder}
+              onChange={(event) => setJournalQuery(event.target.value)} />
+          </label>
+          <div className="journal-buttons">
+            <button type="button" className="muted-button" onClick={() => { void exportJournal("json"); }}>{t.journalExportJson}</button>
+            <button type="button" className="muted-button" onClick={() => { void exportJournal("md"); }}>{t.journalExportMd}</button>
+            <label className="muted-button journal-import">{t.journalImport}
+              <input type="file" accept=".json,application/json" onChange={(event) => {
+                void importJournal(event.target.files?.[0]);
+                event.target.value = "";
+              }} />
+            </label>
+          </div>
+          <button type="button" className="muted-button journal-clear-all" onClick={clearJournal}>{t.journalClear}</button>
+          <small>{t.journalBackupNote}</small>
+          {backupMessage && <p role="status">{backupMessage}</p>}
+        </div>
         {entries.length === 0 ? <p className="subtle">{t.journalEmpty}</p> :
+          filteredEntries.length === 0 ? <p className="subtle">{t.journalNoMatches}</p> :
           <div className="journal-list">
-            {entries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <article className="journal-entry" key={entry.date}>
                 <div className="journal-entry-header">
                   <strong>{entry.date}</strong>
