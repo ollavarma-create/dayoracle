@@ -9,6 +9,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             biorhythm::get_biorhythms,
             vault::vault_exists,
+            vault::vault_delete,
             vault::vault_create,
             vault::vault_read,
             vault::vault_write,
