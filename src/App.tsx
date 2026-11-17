@@ -40,7 +40,7 @@ const text = {
     backToOracle: "Back to oracle",
     journal: "Journal",
     journalTitle: "Your days, in your own words",
-    protect: "Protect journal", vaultPassword: "Password", vaultConfirm: "Confirm password", vaultCreate: "Enable encryption", vaultUnlock: "Unlock", vaultLock: "Lock journal", vaultLocked: "Journal locked", vaultWarning: "No password recovery is available. Keep your password safe.", vaultMismatch: "Passwords must match and contain at least 12 characters.", vaultError: "Vault operation failed. Check your password or try again.", vaultNew: "New password", vaultChange: "Change password", vaultEncryptedExport: "Export encrypted backup", vaultPlainWarning: "This export is NOT encrypted. Continue?",
+    settings: "Settings", settingsClose: "Close settings", passwordSettings: "Change password", protect: "Protect journal", vaultPassword: "Password", vaultConfirm: "Confirm password", vaultCreate: "Enable encryption", vaultUnlock: "Unlock", vaultLock: "Lock journal", vaultLocked: "Journal locked", vaultWarning: "No password recovery is available. Keep your password safe.", vaultMismatch: "Passwords must match and contain at least 12 characters.", vaultError: "Vault operation failed. Check your password or try again.", vaultNew: "New password", vaultChange: "Change password", vaultEncryptedExport: "Export encrypted backup", vaultPlainWarning: "This export is NOT encrypted. Continue?",
     journalSearch: "Search journal",
     journalClear: "Clear journal",
     journalClearConfirm: "Delete all saved intentions and reflections on this device? Your birth date and settings will be kept. This cannot be undone.",
@@ -98,7 +98,7 @@ const text = {
     backToOracle: "Takaisin oraakkeliin",
     journal: "Päiväkirja",
     journalTitle: "Omat päiväsi, omin sanoin",
-    protect: "Suojaa päiväkirja", vaultPassword: "Salasana", vaultConfirm: "Vahvista salasana", vaultCreate: "Ota salaus käyttöön", vaultUnlock: "Avaa", vaultLock: "Lukitse päiväkirja", vaultLocked: "Päiväkirja lukittu", vaultWarning: "Salasanaa ei voi palauttaa. Säilytä se huolellisesti.", vaultMismatch: "Salasanojen on täsmättävä ja oltava vähintään 12 merkkiä.", vaultError: "Salaustoiminto epäonnistui. Tarkista salasana tai yritä uudelleen.", vaultNew: "Uusi salasana", vaultChange: "Vaihda salasana", vaultEncryptedExport: "Vie salattu varmuuskopio", vaultPlainWarning: "Tämä vienti EI ole salattu. Jatketaanko?",
+    settings: "Asetukset", settingsClose: "Sulje asetukset", passwordSettings: "Vaihda salasana", protect: "Suojaa päiväkirja", vaultPassword: "Salasana", vaultConfirm: "Vahvista salasana", vaultCreate: "Ota salaus käyttöön", vaultUnlock: "Avaa", vaultLock: "Lukitse päiväkirja", vaultLocked: "Päiväkirja lukittu", vaultWarning: "Salasanaa ei voi palauttaa. Säilytä se huolellisesti.", vaultMismatch: "Salasanojen on täsmättävä ja oltava vähintään 12 merkkiä.", vaultError: "Salaustoiminto epäonnistui. Tarkista salasana tai yritä uudelleen.", vaultNew: "Uusi salasana", vaultChange: "Vaihda salasana", vaultEncryptedExport: "Vie salattu varmuuskopio", vaultPlainWarning: "Tämä vienti EI ole salattu. Jatketaanko?",
     journalSearch: "Hae päiväkirjasta",
     journalClear: "Tyhjennä päiväkirja",
     journalClearConfirm: "Poistetaanko kaikki tälle laitteelle tallennetut aikomukset ja pohdinnat? Syntymäpäivä ja asetukset säilyvät. Tätä ei voi perua.",
@@ -218,6 +218,8 @@ export default function App() {
   const [vaultPassword, setVaultPassword] = useState("");
   const [vaultConfirm, setVaultConfirm] = useState("");
   const [vaultNew, setVaultNew] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [passwordSettingsOpen, setPasswordSettingsOpen] = useState(false);
   const [vaultError, setVaultError] = useState("");
   const [vaultBusy, setVaultBusy] = useState(false);
   const secret = useRef<string | null>(null);
@@ -290,7 +292,7 @@ export default function App() {
     if (vaultBusy || vaultStatus !== "unlocked") return;
     setVaultBusy(true); await pending.current;
     secret.current = null; setBirth(""); setIntentions({}); setReflections({});
-    setVaultPassword(""); setVaultNew(""); setJournalQuery(""); lastBirth.current = null; setStatus("locked");
+    setVaultPassword(""); setVaultNew(""); setJournalQuery(""); setSettingsOpen(false); setPasswordSettingsOpen(false); lastBirth.current = null; setStatus("locked");
     setVaultBusy(false);
   };
   const updatePassword = async () => {
@@ -420,9 +422,21 @@ export default function App() {
     <main className="shell">
       <header className="header">
         <div className="brand"><span className="mark">☾</span><div><h1>DayOracle</h1><p>{t.tagline}</p></div></div>
-        <select aria-label="Language" value={lang} onChange={(event) => setLang(event.target.value as Locale)}>
-          <option value="en">English</option><option value="fi">Suomi</option>
-        </select>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <select aria-label="Language" value={lang} onChange={(event) => setLang(event.target.value as Locale)}>
+            <option value="en">English</option><option value="fi">Suomi</option>
+          </select>
+          {vaultStatus !== "checking" && vaultStatus !== "locked" && <button type="button"
+            className="muted-button" aria-label={t.settings} title={t.settings}
+            aria-expanded={settingsOpen} aria-controls="dayoracle-settings"
+            onClick={() => { setSettingsOpen(!settingsOpen); setPasswordSettingsOpen(false); setVaultError(""); }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.86 1.86-.06-.06A1.7 1.7 0 0 0 16 18.4a1.7 1.7 0 0 0-1 1.57V21h-2.6v-.09a1.7 1.7 0 0 0-1.13-1.6 1.7 1.7 0 0 0-1.85.36l-.06.06-1.86-1.86.06-.06A1.7 1.7 0 0 0 7.2 16a1.7 1.7 0 0 0-1.57-1H4.5v-2.6h.09a1.7 1.7 0 0 0 1.6-1.13 1.7 1.7 0 0 0-.36-1.85l-.06-.06L7.63 7.5l.06.06A1.7 1.7 0 0 0 9.5 7.2a1.7 1.7 0 0 0 1-1.57V4.5h2.6v.09a1.7 1.7 0 0 0 1.13 1.6 1.7 1.7 0 0 0 1.85-.36l.06-.06L18 7.63l-.06.06A1.7 1.7 0 0 0 17.6 9.5a1.7 1.7 0 0 0 1.57 1h1.33v2.6h-.09A1.7 1.7 0 0 0 19.4 15Z" transform="translate(-.5 -.5)"/>
+            </svg>
+          </button>}
+        </div>
       </header>
 
       {vaultStatus === "checking" && <section className="panel"><p>Checking journal security…</p>{vaultError && <p role="alert">{vaultError}</p>}</section>}
@@ -564,20 +578,33 @@ export default function App() {
           <BiorhythmChart timeline={result.timeline} today={result.date} lang={lang} onSelect={setDay} />
         </section>
       </>}
-      <section className="panel journal-panel">
+      {settingsOpen && <section id="dayoracle-settings" className="panel journal-panel" aria-label={t.settings}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <h2 style={{ margin: 0 }}>{t.settings}</h2>
+          <button type="button" className="muted-button" onClick={() => { setSettingsOpen(false); setPasswordSettingsOpen(false); }}>{t.settingsClose}</button>
+        </div>
         {vaultStatus === "unprotected" ? <>
           <h3>{t.protect}</h3><p>{t.vaultWarning}</p>
-          <label>{t.vaultPassword}<input type="password" autoComplete="new-password" value={vaultPassword} onChange={e => setVaultPassword(e.target.value)} /></label>
-          <label>{t.vaultConfirm}<input type="password" autoComplete="new-password" value={vaultConfirm} onChange={e => setVaultConfirm(e.target.value)} /></label>
-          <button type="button" disabled={vaultBusy || !birth} onClick={() => { void enableVault(); }}>{t.vaultCreate}</button>
+          <div style={{ display: "grid", gap: "1rem", maxWidth: "360px", marginTop: "1rem" }}>
+            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultPassword}<input type="password" autoComplete="new-password" value={vaultPassword} onChange={e => setVaultPassword(e.target.value)} /></label>
+            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultConfirm}<input type="password" autoComplete="new-password" value={vaultConfirm} onChange={e => setVaultConfirm(e.target.value)} /></label>
+            <button type="button" disabled={vaultBusy || !birth} onClick={() => { void enableVault(); }}>{t.vaultCreate}</button>
+          </div>
         </> : <>
-          <button type="button" disabled={vaultBusy} onClick={() => { void lockVault(); }}>{t.vaultLock}</button>
-          <label>{t.vaultNew}<input type="password" autoComplete="new-password" value={vaultNew} onChange={e => setVaultNew(e.target.value)} /></label>
-          <button type="button" disabled={vaultBusy} onClick={() => { void updatePassword(); }}>{t.vaultChange}</button>
-          <button type="button" disabled={vaultBusy} onClick={() => { void exportVault(); }}>{t.vaultEncryptedExport}</button>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1rem" }}>
+            <button type="button" disabled={vaultBusy} onClick={() => { void lockVault(); }}>{t.vaultLock}</button>
+            <button type="button" className="muted-button" aria-expanded={passwordSettingsOpen}
+              onClick={() => { setPasswordSettingsOpen(!passwordSettingsOpen); setVaultNew(""); setVaultError(""); }}>{t.passwordSettings}</button>
+            <button type="button" disabled={vaultBusy} onClick={() => { void exportVault(); }}>{t.vaultEncryptedExport}</button>
+          </div>
+          {passwordSettingsOpen && <div style={{ display: "grid", gap: "0.75rem", maxWidth: "360px", marginTop: "1rem" }}>
+            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultNew}<input type="password" autoComplete="new-password"
+              value={vaultNew} onChange={e => setVaultNew(e.target.value)} /></label>
+            <button type="button" disabled={vaultBusy} onClick={() => { void updatePassword(); }}>{t.vaultChange}</button>
+          </div>}
         </>}
         {vaultError && <p role="alert">{vaultError}</p>}
-      </section>
+      </section>}
       </>}
       <footer>{t.disclaimer} · v0.1.0-alpha.1</footer>
     </main>
