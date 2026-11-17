@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useState } from "react";
 import { dailyQuestion } from "./reflection";
 import { journalEntries } from "./journal";
@@ -38,6 +40,11 @@ const text = {
     journal: "Journal",
     journalTitle: "Your days, in your own words",
     journalSearch: "Search journal",
+    journalClear: "Clear journal",
+    journalClearConfirm: "Delete all saved intentions and reflections on this device? Your birth date and settings will be kept. This cannot be undone.",
+    journalClearDone: "Journal cleared",
+    journalExportOk: "Export saved",
+    journalExportError: "Could not save export",
     journalSearchPlaceholder: "Search dates, intentions or notes…",
     journalExportJson: "Export JSON backup",
     journalExportMd: "Export Markdown",
@@ -90,6 +97,11 @@ const text = {
     journal: "Päiväkirja",
     journalTitle: "Omat päiväsi, omin sanoin",
     journalSearch: "Hae päiväkirjasta",
+    journalClear: "Tyhjennä päiväkirja",
+    journalClearConfirm: "Poistetaanko kaikki tälle laitteelle tallennetut aikomukset ja pohdinnat? Syntymäpäivä ja asetukset säilyvät. Tätä ei voi perua.",
+    journalClearDone: "Päiväkirja tyhjennetty",
+    journalExportOk: "Vientitiedosto tallennettu",
+    journalExportError: "Vientitiedoston tallennus epäonnistui",
     journalSearchPlaceholder: "Hae päivämääriä, aikomuksia tai havaintoja…",
     journalExportJson: "Vie JSON-varmuuskopio",
     journalExportMd: "Vie Markdown",
@@ -228,25 +240,31 @@ export default function App() {
   const intention = intentions[day] ?? "";
   const entries = useMemo(() => journalEntries(birth, intentions, reflections), [birth, intentions, reflections]);
   const filteredEntries = useMemo(() => filterJournal(entries, journalQuery), [entries, journalQuery]);
-  const downloadText = (filename: string, content: string, mime: string) => {
-    const url = URL.createObjectURL(new Blob([content], { type: mime }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-  const exportJournal = (format: "json" | "md") => {
+  const exportJournal = async (format: "json" | "md") => {
     try {
       const backup = makeBackup(birth, intentions, reflections);
-      if (format === "json") downloadText("dayoracle-journal.json", JSON.stringify(backup, null, 2), "application/json");
-      else downloadText("dayoracle-journal.md", backupMarkdown(backup, {
-        title: t.journalTitle, intention: t.journalIntention, status: t.evening, note: t.journalObservation,
-      }), "text/markdown");
-      setBackupMessage("");
-    } catch { setBackupMessage(t.journalImportError); }
+      const filename = format === "json" ? "dayoracle-journal.json" : "dayoracle-journal.md";
+      const destination = await save({
+        defaultPath: filename,
+        filters: [{ name: format === "json" ? "JSON" : "Markdown", extensions: [format] }],
+      });
+      if (!destination) return;
+      const content = format === "json" ? JSON.stringify(backup, null, 2) :
+        backupMarkdown(backup, {
+          title: t.journalTitle, intention: t.journalIntention, status: t.evening, note: t.journalObservation,
+        });
+      await writeTextFile(destination, content);
+      setBackupMessage(t.journalExportOk);
+    } catch { setBackupMessage(t.journalExportError); }
+  };
+  const clearJournal = () => {
+    if (!window.confirm(t.journalClearConfirm)) return;
+    localStorage.removeItem("dayoracle-intentions");
+    localStorage.removeItem(REFLECTION_STORAGE_KEY);
+    setIntentions({});
+    setReflections({});
+    setJournalQuery("");
+    setBackupMessage(t.journalClearDone);
   };
   const importJournal = async (file: File | undefined) => {
     if (!file) return;
@@ -393,8 +411,8 @@ export default function App() {
               onChange={(event) => setJournalQuery(event.target.value)} />
           </label>
           <div className="journal-buttons">
-            <button type="button" className="muted-button" onClick={() => exportJournal("json")}>{t.journalExportJson}</button>
-            <button type="button" className="muted-button" onClick={() => exportJournal("md")}>{t.journalExportMd}</button>
+            <button type="button" className="muted-button" onClick={() => { void exportJournal("json"); }}>{t.journalExportJson}</button>
+            <button type="button" className="muted-button" onClick={() => { void exportJournal("md"); }}>{t.journalExportMd}</button>
             <label className="muted-button journal-import">{t.journalImport}
               <input type="file" accept=".json,application/json" onChange={(event) => {
                 void importJournal(event.target.files?.[0]);
@@ -402,6 +420,7 @@ export default function App() {
               }} />
             </label>
           </div>
+          <button type="button" className="muted-button journal-clear-all" onClick={clearJournal}>{t.journalClear}</button>
           <small>{t.journalBackupNote}</small>
           {backupMessage && <p role="status">{backupMessage}</p>}
         </div>
