@@ -5,7 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createVault, unlockVault, writeVault, deleteVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
-import { type ForecastHistory } from "./forecast-history";
+import { addForecast, mayAssess, assessForecast, forecastStats, type ForecastHistory, type ForecastRating } from "./forecast-history";
 import { VaultSaveQueue } from "./vault-save-queue";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
@@ -602,6 +602,48 @@ export default function App() {
     return () => { active = false; };
   }, [birth, day]);
 
+  // Only a forecast actually viewed today is recorded; never backfill missed dates.
+  useEffect(() => {
+    if (vaultStatus !== "unprotected" && vaultStatus !== "unlocked") return;
+    if (view !== "oracle" || !result || error || !birth || day !== localToday()) return;
+    if (forecastsRef.current[day]) return;
+    const now = new Date();
+    const snapshot = { date: day, birthDateAtCreation: birth, persona, locale: lang,
+      message: oracleMessage(result.values, persona, lang, day, birth), createdAt: now.toISOString() };
+    const next = addForecast(forecastsRef.current, snapshot);
+    if (next === forecastsRef.current) return;
+    // Stage synchronously so a quick persona/language change cannot overwrite the first snapshot.
+    forecastsRef.current = next;
+    try {
+      persist({ birthDate: birth, intentions, reflections, forecasts: next });
+      setForecasts(next);
+    } catch (cause) {
+      forecastsRef.current = forecasts;
+      setVaultError(String(cause));
+    }
+  }, [vaultStatus, view, result, error, birth, day, persona, lang]);
+
+  const savedForecast = forecasts[day];
+  const historyStats = forecastStats(forecasts);
+  const [assessmentNote, setAssessmentNote] = useState("");
+  const [assessmentRating, setAssessmentRating] = useState<ForecastRating>("unsure");
+  const [assessmentError, setAssessmentError] = useState("");
+  useEffect(() => {
+    setAssessmentRating(savedForecast?.assessment?.rating ?? "unsure");
+    setAssessmentNote(savedForecast?.assessment?.note ?? "");
+    setAssessmentError("");
+  }, [day, savedForecast?.assessment?.updatedAt]);
+  const saveAssessment = () => {
+    if (!savedForecast) return;
+    try {
+      const next = assessForecast(forecastsRef.current, day, assessmentRating, assessmentNote, new Date());
+      persist({ birthDate: birth, intentions, reflections, forecasts: next });
+      forecastsRef.current = next;
+      setForecasts(next);
+      setAssessmentError("");
+    } catch (cause) { setAssessmentError(String(cause)); }
+  };
+
   const quote = useMemo(() => quotes[lang][Array.from(day).reduce((sum, char) => sum + char.charCodeAt(0), 0) % quotes[lang].length], [lang, day]);
   const forget = () => {
     if (vaultBusy || !window.confirm(t.forgetHint)) return;
@@ -734,8 +776,28 @@ export default function App() {
       {result && !error && view === "oracle" && <>
         <section className="hero panel">
           <div className="eyebrow">✦ {t.perspective}</div>
-          <h2>{oracleMessage(result.values, persona, lang, day, birth)}</h2>
+          <h2>{savedForecast?.message ?? oracleMessage(result.values, persona, lang, day, birth)}</h2>
           <p className="subtle">{t.days}: {result.daysLived.toLocaleString(lang)}</p>
+          {savedForecast && <p className="subtle">{lang === "fi" ? "Tallennettu ennuste" : "Saved forecast"} · {new Date(savedForecast.createdAt).toLocaleString(lang)}
+            {new Date(savedForecast.createdAt).getHours() >= 18 && <span> · {lang === "fi" ? "Näytetty ensi kertaa illalla" : "First viewed in the evening"}</span>}
+          </p>}
+          {savedForecast && mayAssess(day, new Date()) && <div className="panel" style={{ marginTop: "1rem" }}>
+            <h3>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
+            <p className="subtle">{lang === "fi" ? "Oma tulkintasi, ei ennusteen tieteellinen osuvuus." : "Your subjective impression, not scientific predictive accuracy."}</p>
+            <label>{lang === "fi" ? "Arvio" : "Rating"}
+              <select value={assessmentRating} onChange={e => setAssessmentRating(e.target.value as ForecastRating)}>
+                <option value="unsure">{lang === "fi" ? "En osaa sanoa" : "Unsure"}</option>
+                <option value="yes">{lang === "fi" ? "Osui" : "Felt accurate"}</option>
+                <option value="partial">{lang === "fi" ? "Osittain" : "Partly"}</option>
+                <option value="no">{lang === "fi" ? "Ei osunut" : "Did not fit"}</option>
+              </select>
+            </label>
+            <label>{lang === "fi" ? "Huomio (vapaaehtoinen)" : "Note (optional)"}
+              <textarea maxLength={500} value={assessmentNote} onChange={e => setAssessmentNote(e.target.value)} />
+            </label>
+            <button type="button" onClick={saveAssessment}>{lang === "fi" ? "Tallenna arvio" : "Save assessment"}</button>
+            {assessmentError && <p role="alert">{assessmentError}</p>}
+          </div>}
         </section>
         <section className="bottom-grid">
           <div className="panel">
