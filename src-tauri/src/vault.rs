@@ -89,20 +89,16 @@ fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
     let parent = path.parent().ok_or("Invalid vault location")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let mut tmp = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
-    tmp.as_file().set_permissions(readonly_owner_permissions()).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        tmp.as_file().set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+    }
     tmp.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
     tmp.as_file().sync_all().map_err(|e| e.to_string())?;
     tmp.persist(path).map_err(|e| e.error.to_string())?;
     Ok(())
-}
-#[cfg(unix)]
-fn readonly_owner_permissions() -> fs::Permissions {
-    use std::os::unix::fs::PermissionsExt;
-    fs::Permissions::from_mode(0o600)
-}
-#[cfg(not(unix))]
-fn readonly_owner_permissions() -> fs::Permissions {
-    fs::Permissions::readonly()
 }
 
 #[tauri::command]
