@@ -125,3 +125,5 @@ footer { margin-top: 10px; padding-bottom: 4px; }
 .journal-import:focus-within{outline:2px solid #e4ad74;outline-offset:2px}
 .journal-import input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .journal-tools small{color:#b8c6d7}
+
+.journal-clear-all{justify-self:start;border-color:#87675f;color:#f2c6b7;font-size:12px;padding:8px 11px}
