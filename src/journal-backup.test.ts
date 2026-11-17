@@ -33,15 +33,15 @@ test("forgetting birth date does not erase journal in serialization", () => {
   assert.deepEqual(parseBackup(JSON.stringify(state)), state);
 });
 
-test("v1 backup migrates to v2 without losing reflections", () => {
-  const legacy = { ...sample, version: 1 };
+test("existing v1 backups without forecasts remain readable", () => {
+  const legacy = { ...sample };
   delete (legacy as Partial<typeof sample>).forecasts;
   const restored = parseBackup(JSON.stringify(legacy));
-  assert.equal(restored.version, 2);
+  assert.equal(restored.version, 1);
   assert.deepEqual(restored.forecasts, {});
   assert.deepEqual(restored.reflections, sample.reflections);
 });
-test("v2 forecast history survives roundtrip independently of birth date", () => {
+test("forecast history survives roundtrip independently of birth date", () => {
   const forecast = { date: "2026-11-17", birthDateAtCreation: "1980-01-01",
     persona: "skeptic" as const, locale: "fi" as const, message: "Aamu",
     createdAt: "2026-11-17T07:00:00Z", assessment: {
