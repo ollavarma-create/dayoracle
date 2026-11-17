@@ -129,6 +129,12 @@ fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     tmp.as_file().sync_all().map_err(|e| e.to_string())?;
     tmp.persist(path).map_err(|e| e.error.to_string())?;
+    // The file data is durable above; on Unix, sync the parent directory too
+    // so the atomic rename is durable across an unexpected power loss.
+    #[cfg(unix)]
+    fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|e| format!("Vault directory sync failed: {e}"))?;
     Ok(())
 }
 
@@ -241,6 +247,26 @@ pub async fn vault_import(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn atomic_write_replaces_existing_vault_with_complete_ciphertext() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal.vault.json");
+        let old = encrypt("test password", r#"{"note":"old"}"#).unwrap();
+        let new = encrypt("test password", r#"{"note":"new"}"#).unwrap();
+
+        atomic_write(&path, &old).unwrap();
+        assert_eq!(
+            decrypt("test password", &read_vault(&path).unwrap()).unwrap(),
+            r#"{"note":"old"}"#
+        );
+
+        atomic_write(&path, &new).unwrap();
+        assert_eq!(
+            decrypt("test password", &read_vault(&path).unwrap()).unwrap(),
+            r#"{"note":"new"}"#
+        );
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
     #[test]
     fn roundtrip_and_wrong_password() {
         let original = r#"{"birthDate":"2000-01-01","note":"päiväkirja"}"#;
