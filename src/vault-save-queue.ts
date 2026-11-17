@@ -6,7 +6,11 @@ export class VaultSaveQueue<T> {
   private staged: T | null = null;
   private running: Promise<void> | null = null;
 
-  constructor(private readonly write: (snapshot: T) => Promise<void>) {}
+  private readonly write: (snapshot: T) => Promise<void>;
+
+  constructor(write: (snapshot: T) => Promise<void>) {
+    this.write = write;
+  }
 
   stage(snapshot: T): void {
     this.staged = snapshot;
