@@ -100,3 +100,17 @@ select option{background-color:#1b2b42;color:#f4ecdf}
 .evening-note textarea { min-height: 48px; padding: 8px 10px; }
 .evening-actions { margin-top: 5px; }
 footer { margin-top: 10px; padding-bottom: 4px; }
+
+/* PR #8: read-only private journal, no scores or ranking */
+.journal-switch[aria-pressed="true"]{border-color:#e4ad74;color:#f2d4a6}
+.journal-panel{margin-top:10px;padding:18px}
+.journal-panel h2{font-family:Georgia,serif;font-size:22px;margin:8px 0 14px}
+.journal-list{display:grid;gap:10px;max-height:480px;overflow-y:auto;padding-right:4px}
+.journal-entry{background:#1b2b42;border:1px solid #35475e;border-radius:10px;padding:12px 14px;overflow-wrap:anywhere}
+.journal-entry-header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.journal-entry-header .muted-button{padding:6px 10px;font-size:12px}
+.journal-entry p{margin:7px 0 0;line-height:1.45;font-size:14px;white-space:pre-wrap}
+.journal-entry p span{color:#a6b8cb}
+.journal-note{color:#f1e9df}
+@media(min-width:901px){.inputs{grid-template-columns:repeat(3,minmax(125px,1fr)) repeat(4,auto)}.inputs .muted-button{font-size:12px;padding:9px 8px}}
+@media(max-width:900px){.inputs{display:flex;flex-wrap:wrap}.inputs label{flex:1 1 170px}.inputs .muted-button{flex:1 1 auto}}
