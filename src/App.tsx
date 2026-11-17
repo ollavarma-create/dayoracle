@@ -442,12 +442,43 @@ export default function App() {
       {vaultStatus === "checking" && <section className="panel"><p>Checking journal security…</p>{vaultError && <p role="alert">{vaultError}</p>}</section>}
       {vaultStatus === "locked" && <section className="panel journal-panel">
         <h2>{t.vaultLocked}</h2><p>{t.vaultWarning}</p>
-        <label>{t.vaultPassword}<input type="password" autoComplete="off" value={vaultPassword}
-          onChange={e => setVaultPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void openVault(); }} /></label>
-        <button type="button" disabled={vaultBusy} onClick={() => { void openVault(); }}>{t.vaultUnlock}</button>
+        <div style={{ display: "grid", gap: "0.75rem", maxWidth: "360px", marginTop: "1rem" }}>
+          <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultPassword}
+            <input type="password" autoComplete="off" value={vaultPassword}
+              onChange={e => setVaultPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void openVault(); }} />
+          </label>
+          <button type="button" disabled={vaultBusy} onClick={() => { void openVault(); }}>{t.vaultUnlock}</button>
+        </div>
         {vaultError && <p role="alert">{vaultError}</p>}
       </section>}
       {(vaultStatus === "unprotected" || vaultStatus === "unlocked") && <>
+      {settingsOpen && <section id="dayoracle-settings" className="panel journal-panel" aria-label={t.settings}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <h2 style={{ margin: 0 }}>{t.settings}</h2>
+          <button type="button" className="muted-button" onClick={() => { setSettingsOpen(false); setPasswordSettingsOpen(false); }}>{t.settingsClose}</button>
+        </div>
+        {vaultStatus === "unprotected" ? <>
+          <h3>{t.protect}</h3><p>{t.vaultWarning}</p>
+          <div style={{ display: "grid", gap: "1rem", maxWidth: "360px", marginTop: "1rem" }}>
+            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultPassword}<input type="password" autoComplete="new-password" value={vaultPassword} onChange={e => setVaultPassword(e.target.value)} /></label>
+            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultConfirm}<input type="password" autoComplete="new-password" value={vaultConfirm} onChange={e => setVaultConfirm(e.target.value)} /></label>
+            <button type="button" disabled={vaultBusy || !birth} onClick={() => { void enableVault(); }}>{t.vaultCreate}</button>
+          </div>
+        </> : <>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1rem" }}>
+            <button type="button" disabled={vaultBusy} onClick={() => { void lockVault(); }}>{t.vaultLock}</button>
+            <button type="button" className="muted-button" aria-expanded={passwordSettingsOpen}
+              onClick={() => { setPasswordSettingsOpen(!passwordSettingsOpen); setVaultNew(""); setVaultError(""); }}>{t.passwordSettings}</button>
+            <button type="button" disabled={vaultBusy} onClick={() => { void exportVault(); }}>{t.vaultEncryptedExport}</button>
+          </div>
+          {passwordSettingsOpen && <div style={{ display: "grid", gap: "0.75rem", maxWidth: "360px", marginTop: "1rem" }}>
+            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultNew}<input type="password" autoComplete="new-password"
+              value={vaultNew} onChange={e => setVaultNew(e.target.value)} /></label>
+            <button type="button" disabled={vaultBusy} onClick={() => { void updatePassword(); }}>{t.vaultChange}</button>
+          </div>}
+        </>}
+        {vaultError && <p role="alert">{vaultError}</p>}
+      </section>}
       <section className="inputs" aria-label="Oracle settings">
         <label>{t.birth}<input type="date" value={birth} max={day} onChange={(event) => setBirth(event.target.value)} /></label>
         <label>{t.date}<input type="date" value={day} min={birth || undefined} onChange={(event) => setDay(event.target.value)} /></label>
@@ -578,33 +609,7 @@ export default function App() {
           <BiorhythmChart timeline={result.timeline} today={result.date} lang={lang} onSelect={setDay} />
         </section>
       </>}
-      {settingsOpen && <section id="dayoracle-settings" className="panel journal-panel" aria-label={t.settings}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0 }}>{t.settings}</h2>
-          <button type="button" className="muted-button" onClick={() => { setSettingsOpen(false); setPasswordSettingsOpen(false); }}>{t.settingsClose}</button>
-        </div>
-        {vaultStatus === "unprotected" ? <>
-          <h3>{t.protect}</h3><p>{t.vaultWarning}</p>
-          <div style={{ display: "grid", gap: "1rem", maxWidth: "360px", marginTop: "1rem" }}>
-            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultPassword}<input type="password" autoComplete="new-password" value={vaultPassword} onChange={e => setVaultPassword(e.target.value)} /></label>
-            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultConfirm}<input type="password" autoComplete="new-password" value={vaultConfirm} onChange={e => setVaultConfirm(e.target.value)} /></label>
-            <button type="button" disabled={vaultBusy || !birth} onClick={() => { void enableVault(); }}>{t.vaultCreate}</button>
-          </div>
-        </> : <>
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1rem" }}>
-            <button type="button" disabled={vaultBusy} onClick={() => { void lockVault(); }}>{t.vaultLock}</button>
-            <button type="button" className="muted-button" aria-expanded={passwordSettingsOpen}
-              onClick={() => { setPasswordSettingsOpen(!passwordSettingsOpen); setVaultNew(""); setVaultError(""); }}>{t.passwordSettings}</button>
-            <button type="button" disabled={vaultBusy} onClick={() => { void exportVault(); }}>{t.vaultEncryptedExport}</button>
-          </div>
-          {passwordSettingsOpen && <div style={{ display: "grid", gap: "0.75rem", maxWidth: "360px", marginTop: "1rem" }}>
-            <label style={{ display: "grid", gap: "0.4rem" }}>{t.vaultNew}<input type="password" autoComplete="new-password"
-              value={vaultNew} onChange={e => setVaultNew(e.target.value)} /></label>
-            <button type="button" disabled={vaultBusy} onClick={() => { void updatePassword(); }}>{t.vaultChange}</button>
-          </div>}
-        </>}
-        {vaultError && <p role="alert">{vaultError}</p>}
-      </section>}
+
       </>}
       <footer>{t.disclaimer} · v0.1.0-alpha.1</footer>
     </main>
