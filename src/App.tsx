@@ -93,7 +93,17 @@ function BiorhythmChart({ timeline, today, lang, onSelect }: { timeline: Point[]
   };
   return (
     <div className="chart-wrap">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={lang === "fi" ? "Biorytmikäyrä. Valitse päivä napsauttamalla." : "Biorhythm chart. Click to select a date."} className="chart">
+      <svg
+        onPointerMove={(event) => {
+          if (timeline.length) setHoverIndex(nearest(event.clientX, event.currentTarget.getBoundingClientRect()));
+        }}
+        onPointerLeave={() => setHoverIndex(null)}
+        onClick={(event) => {
+          if (timeline.length) {
+            onSelect(timeline[nearest(event.clientX, event.currentTarget.getBoundingClientRect())].date);
+          }
+        }}
+        viewBox={`0 0 ${width} ${height}`} role="img" aria-label={lang === "fi" ? "Biorytmikäyrä. Valitse päivä napsauttamalla." : "Biorhythm chart. Click to select a date."} className="chart">
         {[-100, 0, 100].map((value) =>
           <g key={value}><line x1={left} x2={width-right} y1={y(value)} y2={y(value)} className="gridline" />
             <text x="4" y={y(value)+4} className="axis-text">{value}</text></g>)}
