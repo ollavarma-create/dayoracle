@@ -1,4 +1,4 @@
-import { stableHash, type Locale, type Persona } from "./oracle";
+import { stableHash, type Locale, type Persona } from "./oracle.ts";
 
 /**
  * Reflection prompts are invitations to think, not predictions or diagnoses.
