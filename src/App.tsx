@@ -5,6 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createVault, unlockVault, writeVault, deleteVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
+import { type ForecastHistory } from "./forecast-history";
 import { VaultSaveQueue } from "./vault-save-queue";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
@@ -312,9 +313,16 @@ export default function App() {
     return {};
   });
   const [reflections, setReflections] = useState(() => parseReflections(localStorage.getItem(REFLECTION_STORAGE_KEY)));
+  const [forecasts, setForecasts] = useState<ForecastHistory>(() => {
+    try { return parseBackup(localStorage.getItem("dayoracle-forecast-backup") ?? "").forecasts; }
+    catch { return {}; }
+  });
+  const forecastsRef = useRef(forecasts);
+  forecastsRef.current = forecasts;
   const t = text[lang];
   const persist = (state: VaultState) => {
     if (!validBirthInput(state.birthDate)) return;
+    state = { ...state, forecasts: state.forecasts ?? forecastsRef.current };
     if (statusRef.current === "unlocked" && secret.current) {
       saveQueue.current!.stage(state);
       setSaveState("pending");
@@ -325,6 +333,7 @@ export default function App() {
     } else if (statusRef.current === "unprotected") {
       localStorage.setItem("dayoracle-intentions", JSON.stringify(state.intentions));
       localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(state.reflections));
+      localStorage.setItem("dayoracle-forecast-backup", JSON.stringify(makeBackup(state.birthDate, state.intentions, state.reflections, state.forecasts)));
     }
   };
   useEffect(() => {
@@ -335,7 +344,8 @@ export default function App() {
         localStorage.removeItem("dayoracle-intentions");
         localStorage.removeItem(REFLECTION_STORAGE_KEY);
         localStorage.removeItem("dayoracle-birth");
-        setBirth(""); setIntentions({}); setReflections({});
+        localStorage.removeItem("dayoracle-forecast-backup");
+        setBirth(""); setIntentions({}); setReflections({}); setForecasts({});
         setStatus("locked");
       } else setStatus("unprotected");
     }).catch(() => { if (active) setVaultError("Vault detection failed. Restart DayOracle."); });
@@ -346,7 +356,7 @@ export default function App() {
     if (vaultPassword.length < 12 || vaultPassword !== vaultConfirm) { setVaultError(t.vaultMismatch); return; }
     setVaultBusy(true); setVaultError("");
     try {
-      await createVault(vaultPassword, { birthDate: birth, intentions, reflections });
+      await createVault(vaultPassword, { birthDate: birth, intentions, reflections, forecasts });
       secret.current = vaultPassword;
       localStorage.removeItem("dayoracle-intentions");
       localStorage.removeItem(REFLECTION_STORAGE_KEY);
@@ -360,7 +370,7 @@ export default function App() {
     try {
       const data = await unlockVault(vaultPassword);
       secret.current = vaultPassword;
-      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections);
+      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections); setForecasts(data.forecasts ?? {});
       setVaultPassword(""); lastBirth.current = data.birthDate; setStatus("unlocked");
     } catch { setVaultError(t.vaultError); } finally { setVaultBusy(false); }
   };
@@ -368,7 +378,7 @@ export default function App() {
     if (vaultBusy || vaultStatus !== "unlocked") return;
     setVaultBusy(true); setVaultError("");
     try { await flushVault(); } catch { setVaultBusy(false); return; }
-    secret.current = null; setBirth(""); setIntentions({}); setReflections({});
+    secret.current = null; setBirth(""); setIntentions({}); setReflections({}); setForecasts({});
     setVaultPassword(""); setVaultNew(""); setBackupPassword(""); setBackupImportOpen(false); setJournalQuery(""); setSettingsOpen(false); setPasswordSettingsOpen(false); lastBirth.current = null; setStatus("locked");
     setVaultBusy(false);
   };
@@ -402,7 +412,7 @@ export default function App() {
       await flushVault();
       await writeVault(secret.current ?? "", data);
       lastBirth.current = data.birthDate;
-      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections);
+      setBirth(data.birthDate); setIntentions(data.intentions); setReflections(data.reflections); setForecasts(data.forecasts ?? {});
       setDay(localToday());
       setBackupPassword(""); setBackupImportOpen(false);
       setBackupMessage(t.vaultImportOk);
@@ -430,7 +440,7 @@ export default function App() {
     try {
       if (vaultStatus === "unlocked" && !window.confirm(t.vaultPlainWarning)) return;
       if (vaultStatus === "unlocked") await flushVault();
-      const backup = makeBackup(birth, intentions, reflections);
+      const backup = makeBackup(birth, intentions, reflections, forecasts);
       const filename = format === "json" ? "dayoracle-journal.json" : "dayoracle-journal.md";
       const destination = await save({
         defaultPath: filename,
@@ -448,7 +458,7 @@ export default function App() {
     if (vaultBusy || !window.confirm(t.journalClearConfirm)) return;
     setVaultBusy(true);
     try {
-      const empty = { birthDate: birth, intentions: {}, reflections: {} };
+      const empty = { birthDate: birth, intentions: {}, reflections: {}, forecasts: {} };
       if (vaultStatus === "unlocked") {
         await flushVault();
         await writeVault(secret.current ?? "", empty);
@@ -458,6 +468,8 @@ export default function App() {
       }
       setIntentions({});
       setReflections({});
+      setForecasts({});
+      localStorage.removeItem("dayoracle-forecast-backup");
       setJournalQuery("");
       setBackupMessage(t.journalClearDone);
     } catch (error) {
@@ -486,11 +498,13 @@ export default function App() {
       localStorage.removeItem("dayoracle-birth");
       localStorage.removeItem("dayoracle-intentions");
       localStorage.removeItem(REFLECTION_STORAGE_KEY);
+      localStorage.removeItem("dayoracle-forecast-backup");
       lastBirth.current = null;
       setStatus("unprotected");
       setBirth("");
       setIntentions({});
       setReflections({});
+      setForecasts({});
       setResult(null);
       setJournalQuery("");
       setVaultPassword("");
@@ -525,7 +539,7 @@ export default function App() {
       }
       const backup = parseBackup(raw);
       if (!window.confirm(t.journalImportConfirm)) return;
-      const restored = { birthDate: backup.birthDate, intentions: backup.intentions, reflections: backup.reflections };
+      const restored = { birthDate: backup.birthDate, intentions: backup.intentions, reflections: backup.reflections, forecasts: backup.forecasts };
       if (vaultStatus === "unlocked") {
         setVaultBusy(true);
         try {
@@ -538,12 +552,14 @@ export default function App() {
       } else if (vaultStatus === "unprotected") {
         localStorage.setItem("dayoracle-intentions", JSON.stringify(restored.intentions));
         localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(restored.reflections));
+        localStorage.setItem("dayoracle-forecast-backup", JSON.stringify(backup));
         localStorage.setItem("dayoracle-birth", restored.birthDate);
       } else {
         throw new Error("Journal unavailable");
       }
       setIntentions(restored.intentions);
       setReflections(restored.reflections);
+      setForecasts(restored.forecasts);
       setBirth(restored.birthDate);
       setDay(localToday());
       setBackupMessage(t.journalImportOk);
