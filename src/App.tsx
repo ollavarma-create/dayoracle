@@ -5,7 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createVault, unlockVault, writeVault, deleteVault, vaultExists, changeVaultPassword, exportEncryptedVault, previewEncryptedVault, type VaultStatus, type VaultState } from "./vault-client";
 import { dailyQuestion } from "./reflection";
-import { addForecast, mayAssess, assessForecast, type ForecastHistory, type ForecastRating } from "./forecast-history";
+import { addForecast, mayAssess, assessForecast, type ForecastHistory, type ForecastRating, type AssessmentTime, validAssessmentTime } from "./forecast-history";
 import { VaultSaveQueue } from "./vault-save-queue";
 import { journalEntries } from "./journal";
 import { backupMarkdown, filterJournal, makeBackup, parseBackup } from "./journal-backup";
@@ -231,6 +231,28 @@ export default function App() {
   const [backupPassword, setBackupPassword] = useState("");
   const [backupImportOpen, setBackupImportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [assessmentTime, setAssessmentTime] = useState<AssessmentTime>(() => {
+    const stored = localStorage.getItem("dayoracle-assessment-time") ?? "18:00";
+    return validAssessmentTime(stored) ? stored as AssessmentTime : "18:00";
+  });
+  const [clockNow, setClockNow] = useState(() => new Date());
+  useEffect(() => {
+    // Refresh on the next minute boundary, including when the application stays open.
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      setClockNow(new Date());
+      timer = setTimeout(tick, 60_000 - Date.now() % 60_000 + 50);
+    };
+    timer = setTimeout(tick, 60_000 - Date.now() % 60_000 + 50);
+    return () => clearTimeout(timer);
+  }, []);
+  const changeAssessmentTime = (value: string) => {
+    if (!validAssessmentTime(value)) return;
+    setAssessmentTime(value as AssessmentTime);
+    localStorage.setItem("dayoracle-assessment-time", value);
+    setClockNow(new Date());
+  };
+
   const [passwordSettingsOpen, setPasswordSettingsOpen] = useState(false);
   const [vaultError, setVaultError] = useState("");
   const [vaultBusy, setVaultBusy] = useState(false);
@@ -635,7 +657,7 @@ export default function App() {
   const saveAssessment = () => {
     if (!savedForecast) return;
     try {
-      const next = assessForecast(forecastsRef.current, day, assessmentRating, assessmentNote, new Date());
+      const next = assessForecast(forecastsRef.current, day, assessmentRating, assessmentNote, new Date(), assessmentTime);
       persist({ birthDate: birth, intentions, reflections, forecasts: next });
       forecastsRef.current = next;
       setForecasts(next);
@@ -694,6 +716,20 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
           <h2 style={{ margin: 0 }}>{t.settings}</h2>
           <button type="button" className="muted-button" aria-label={t.settingsClose} title={t.settingsClose} style={{ borderRadius: "50%", width: "2.4rem", height: "2.4rem", padding: 0, display: "grid", placeItems: "center", fontSize: "1.15rem" }} onClick={() => { setSettingsOpen(false); setPasswordSettingsOpen(false); setBackupImportOpen(false); setPasswordChangeMessage(""); setVaultError(""); }}>×</button>
+        </div>
+        <div style={{ marginTop: "1rem", marginBottom: "1rem" }}>
+          <label style={{ display: "grid", gap: "0.4rem", maxWidth: "360px" }}>
+            {lang === "fi" ? "Päivän arviointiaika" : "Daily assessment time"}
+            <select value={assessmentTime} onChange={e => changeAssessmentTime(e.target.value)}>
+              <option value="15:00">{lang === "fi" ? "15.00 – Työpäivän jälkeen" : "15:00 – After work"}</option>
+              <option value="18:00">{lang === "fi" ? "18.00 – Oletus" : "18:00 – Default"}</option>
+              <option value="21:00">{lang === "fi" ? "21.00 – Illalla" : "21:00 – Evening"}</option>
+              <option value="any">{lang === "fi" ? "Milloin tahansa" : "Anytime"}</option>
+            </select>
+          </label>
+          <p className="subtle">{lang === "fi"
+            ? "Paikallinen asetus. Aiemmat arviot säilyvät, eikä arviointia vaadita."
+            : "Local setting. Existing assessments are preserved; rating is optional."}</p>
         </div>
         {vaultStatus === "unprotected" ? <>
           <h3>{t.protect}</h3><p>{t.vaultWarning}</p>
@@ -780,7 +816,7 @@ export default function App() {
           {savedForecast && <p className="subtle">{lang === "fi" ? "Tallennettu ennuste" : "Saved forecast"} · {new Date(savedForecast.createdAt).toLocaleString(lang)}
             {new Date(savedForecast.createdAt).getHours() >= 18 && <span> · {lang === "fi" ? "Näytetty ensi kertaa illalla" : "First viewed in the evening"}</span>}
           </p>}
-          {savedForecast && mayAssess(day, new Date()) && <div className="panel" style={{ marginTop: "1rem" }}>
+          {savedForecast && mayAssess(day, clockNow, assessmentTime) && <div className="panel" style={{ marginTop: "1rem" }}>
             <h3>{lang === "fi" ? "Miltä ennuste tuntui jälkikäteen?" : "How did the forecast feel in hindsight?"}</h3>
             <p className="subtle">{lang === "fi" ? "Oma tulkintasi, ei ennusteen tieteellinen osuvuus." : "Your subjective impression, not scientific predictive accuracy."}</p>
             <label>{lang === "fi" ? "Arvio" : "Rating"}
