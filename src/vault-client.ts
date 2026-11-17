@@ -46,3 +46,8 @@ export async function importEncryptedVault(password: string, encryptedJson: stri
 export async function previewEncryptedVault(password: string, encryptedJson: string): Promise<VaultState> {
   return deserializeVault(await invoke<string>("vault_preview_import", { password, encryptedJson }));
 }
+
+/** Permanently remove the active encrypted vault after password verification. */
+export async function deleteVault(password: string): Promise<void> {
+  await invoke("vault_delete", { password });
+}
